@@ -478,7 +478,8 @@
                     newFiles.push({
                         type: file.type.startsWith('image/') ? 'image' : 'video',
                         data: event.target.result,
-                        name: file.name
+                        name: file.name,
+                        originalFile: file  // オリジナルのファイルオブジェクトを保持
                     });
                     processed++;
                     if (processed === filesToProcess.length) {
@@ -747,7 +748,11 @@
                                             <div class="grid grid-cols-3 gap-2 mb-3">
                                                 ${state.formData.images.map((image, index) => `
                                                     <div class="relative group">
-                                                        <img src="${image}" alt="画像 ${index + 1}" class="w-full h-24 object-cover rounded-lg">
+                                                        ${image.type === 'image' ? `
+                                                            <img src="${image.data}" alt="画像 ${index + 1}" class="w-full h-24 object-cover rounded-lg">
+                                                        ` : `
+                                                            <video src="${image.data}" class="w-full h-24 object-cover rounded-lg" controls></video>
+                                                        `}
                                                         <button onclick="removeImage(${index})" class="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition-colors shadow-lg opacity-0 group-hover:opacity-100">
                                                             ×
                                                         </button>
