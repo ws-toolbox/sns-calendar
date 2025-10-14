@@ -66,7 +66,7 @@
 
     function maybeEnableButtons() {
       if (gapiInited && gisInited) {
-        render();
+        tryAutoSignIn();
       }
     }
 
@@ -78,6 +78,10 @@
         }
         accessToken = gapi.client.getToken().access_token;
         state.isSignedIn = true;
+        
+        // トークンをlocalStorageに保存
+        localStorage.setItem('google_access_token', JSON.stringify(gapi.client.getToken()));
+        
         await loadFromDrive();
         render();
       };
@@ -87,6 +91,42 @@
       } else {
         tokenClient.requestAccessToken({prompt: ''});
       }
+    }
+
+    // 保存されたトークンで自動ログイン
+    async function tryAutoSignIn() {
+      const savedToken = localStorage.getItem('google_access_token');
+      if (savedToken) {
+        try {
+          const token = JSON.parse(savedToken);
+          gapi.client.setToken(token);
+          accessToken = token.access_token;
+          
+          // トークンが有効か確認
+          await gapi.client.drive.files.list({ pageSize: 1 });
+          
+          state.isSignedIn = true;
+          await loadFromDrive();
+          render();
+        } catch (error) {
+          console.log('Saved token expired, need to re-authenticate');
+          localStorage.removeItem('google_access_token');
+          render();
+        }
+      }
+    }
+
+    // ログアウト機能
+    function handleSignOut() {
+      gapi.client.setToken(null);
+      localStorage.removeItem('google_access_token');
+      accessToken = null;
+      state.isSignedIn = false;
+      state.posts = {};
+      state.folderId = null;
+      fileId = null;
+      render();
+      showMessage('ログアウトしました', 'success');
     }
 
     // Google Driveからデータ読み込み
@@ -554,8 +594,14 @@
             </button>
             <p class="text-sm text-gray-600 mt-2">データをGoogle Driveに自動保存します</p>
           ` : `
-            <div class="inline-flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-lg">
-              ✅ Google Driveに接続済み - 自動保存が有効です
+            <div class="inline-flex items-center gap-4">
+              <div class="inline-flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-lg">
+                ✅ Google Driveに接続済み - 自動保存が有効です
+              </div>
+              <button onclick="handleSignOut()" 
+                      class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm transition-colors">
+                ログアウト
+              </button>
             </div>
           `}
         </div>
