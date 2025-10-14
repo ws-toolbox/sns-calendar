@@ -364,38 +364,62 @@
         function handleImageSelect(e) {
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
-
+        
             const remainingSlots = 5 - state.formData.images.length;
             const filesToProcess = files.slice(0, remainingSlots);
             let processed = 0;
-            const newImages = [];
-
+            const newFiles = [];
+        
             filesToProcess.forEach(file => {
+                // 100MBのファイルサイズ制限を追加
+                if (file.size > 100 * 1024 * 1024) {
+                    showMessage(`ファイルサイズが大きすぎます: ${file.name} (100MB以下にしてください)`, 'error');
+                    return;
+                }
+        
                 const reader = new FileReader();
                 reader.onload = (event) => {
-                    newImages.push(event.target.result);
+                    newFiles.push({
+                        type: file.type.startsWith('image/') ? 'image' : 'video',
+                        data: event.target.result,
+                        name: file.name
+                    });
                     processed++;
                     if (processed === filesToProcess.length) {
-                        state.formData.images = [...state.formData.images, ...newImages];
+                        state.formData.images = [...state.formData.images, ...newFiles];
                         render();
                     }
                 };
                 reader.readAsDataURL(file);
             });
         }
-
+        
+        // removeImage関数を修正
         function removeImage(index) {
             state.formData.images = state.formData.images.filter((_, i) => i !== index);
             render();
         }
-
-        function downloadImage(imageData, title, index) {
+        
+        // downloadImage関数を修正し、動画もダウンロード可能に
+        function downloadImage(fileData, title, index) {
             const link = document.createElement('a');
-            link.href = imageData;
-            link.download = `${title || 'image'}_${index + 1}.png`;
+            link.href = fileData.data;
+            link.download = `${title || 'media'}_${index + 1}${getFileExtension(fileData)}`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        }
+
+        function getFileExtension(file) {
+            if (file.type === 'image') {
+                const match = file.data.match(/^data:image\/([a-zA-Z0-9]+);/);
+                return match ? `.${match[1]}` : '.png';
+            }
+            if (file.type === 'video') {
+                const match = file.data.match(/^data:video\/([a-zA-Z0-9]+);/);
+                return match ? `.${match[1]}` : '.mp4';
+            }
+            return '';
         }
 
         function goToToday() {
@@ -565,12 +589,16 @@
                             ` : ''}
                             ${state.formData.images && state.formData.images.length > 0 ? `
                                 <div>
-                                    <div class="text-sm text-gray-500 mb-2">画像（${state.formData.images.length}枚）</div>
+                                    <div class="text-sm text-gray-500 mb-2">メディア（${state.formData.images.length}枚/動画）</div>
                                     <div class="grid grid-cols-2 gap-3">
-                                        ${state.formData.images.map((image, index) => `
-                                            <div class="relative">
-                                                <img src="${image}" alt="画像 ${index + 1}" class="w-full h-40 object-cover rounded-lg border border-gray-200">
-                                                <button onclick="downloadImage('${image}', \`${state.formData.title}\`, ${index})" class="absolute bottom-2 right-2 bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-600 transition-colors shadow-lg text-sm">
+                                        ${state.formData.images.map((file, index) => `
+                                            <div class="relative group">
+                                                ${file.type === 'image' ? `
+                                                    <img src="${file.data}" alt="画像 ${index + 1}" class="w-full h-40 object-cover rounded-lg border border-gray-200">
+                                                ` : `
+                                                    <video src="${file.data}" class="w-full h-40 object-cover rounded-lg border border-gray-200" controls></video>
+                                                `}
+                                                <button onclick="downloadImage(state.formData.images[${index}], \`${state.formData.title}\`, ${index})" class="absolute bottom-2 right-2 bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-600 transition-colors shadow-lg text-sm">
                                                     ⬇ 保存
                                                 </button>
                                             </div>
@@ -633,16 +661,15 @@
                                             ${state.formData.images.length < 5 ? `
                                                 <label class="inline-block bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer transition-colors text-sm">
                                                     + さらに追加
-                                                    <input type="file" accept="image/*" multiple onchange="handleImageSelect(event)" class="hidden">
+                                                    <input type="file" accept="image/*,video/*" multiple onchange="handleImageSelect(event)" class="hidden">
                                                 </label>
                                             ` : ''}
                                         </div>
                                     ` : `
                                         <div>
-                                            <p class="text-gray-600 mb-2 text-sm">📸 画像を選択</p>
                                             <label class="inline-block bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer transition-colors text-sm">
-                                                ファイルを選択
-                                                <input type="file" accept="image/*" multiple onchange="handleImageSelect(event)" class="hidden">
+                                                📸 画像/動画を選択
+                                                <input type="file" accept="image/*,video/*" multiple onchange="handleImageSelect(event)" class="hidden">
                                             </label>
                                         </div>
                                     `}
