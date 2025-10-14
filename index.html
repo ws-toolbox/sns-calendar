@@ -13,7 +13,7 @@
 
   <script>
     const CLIENT_ID = '912701560065-gufbus97skju6eh9qsca6olaqd2rktjn.apps.googleusercontent.com';
-    const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+    const SCOPES = 'https://www.googleapis.com/auth/drive';
     const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
     const FILE_NAME = 'sns_calendar_data.json';
     const FOLDER_NAME = 'SNS投稿管理';
@@ -227,11 +227,11 @@
         });
 
         const file = new Blob([content], { type: 'application/json' });
-        const metadata = {
-          name: FILE_NAME,
-          mimeType: 'application/json',
-          parents: [state.folderId]
-        };
+        
+        // 新規作成と更新でmetadataを分ける
+        const metadata = fileId 
+          ? { name: FILE_NAME, mimeType: 'application/json' }  // 更新時はparentsを含めない
+          : { name: FILE_NAME, mimeType: 'application/json', parents: [state.folderId] };  // 新規作成時のみparentsを含める
 
         const form = new FormData();
         form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
