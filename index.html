@@ -592,18 +592,6 @@
             }
 
       </div>
-                                    `}
-                                </div>
-                            </div>
-                            <div class="flex gap-3 pt-2">
-                                <button onclick="savePost()" ${state.isSaving ? 'disabled' : ''} class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold transition-colors ${state.isSaving ? 'opacity-50 cursor-not-allowed' : ''}">
-                                    ${state.isSaving ? '⏳ 保存中...' : (state.editingPostId ? '更新' : '保存')}
-                                </button>
-                            </div>
-                        </div>
-                    </div>`;
-                }
-            }
 
             document.getElementById('app').innerHTML = `
                 <div class="flex items-center justify-between mb-4">
