@@ -132,32 +132,46 @@
     // Google Driveからデータ読み込み
     async function loadFromDrive() {
       try {
-        // マイドライブ内の「SNS投稿管理」フォルダを検索
-        const folderResponse = await gapi.client.drive.files.list({
-          q: `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        let folderId = null;
+        
+        // まず、マイドライブ内の「SNS投稿管理」フォルダを検索
+        const myDriveFolderResponse = await gapi.client.drive.files.list({
+          q: `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false and 'me' in owners`,
           fields: 'files(id, name)',
           spaces: 'drive'
         });
 
-        let folderId;
-        const folders = folderResponse.result.files;
-        
-        if (folders && folders.length > 0) {
-          folderId = folders[0].id;
+        if (myDriveFolderResponse.result.files && myDriveFolderResponse.result.files.length > 0) {
+          folderId = myDriveFolderResponse.result.files[0].id;
+          console.log('Found folder in My Drive');
         } else {
-          // フォルダが存在しない場合は作成
-          const folderMetadata = {
-            name: FOLDER_NAME,
-            mimeType: 'application/vnd.google-apps.folder'
-          };
-          
-          const folderCreateResponse = await gapi.client.drive.files.create({
-            resource: folderMetadata,
-            fields: 'id'
+          // マイドライブになければ、共有アイテムを検索
+          const sharedFolderResponse = await gapi.client.drive.files.list({
+            q: `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false and sharedWithMe=true`,
+            fields: 'files(id, name, owners)',
+            spaces: 'drive'
           });
-          
-          folderId = folderCreateResponse.result.id;
-          showMessage('マイドライブに「SNS投稿管理」フォルダを作成しました', 'success');
+
+          if (sharedFolderResponse.result.files && sharedFolderResponse.result.files.length > 0) {
+            folderId = sharedFolderResponse.result.files[0].id;
+            const ownerName = sharedFolderResponse.result.files[0].owners?.[0]?.displayName || '他のユーザー';
+            console.log('Found shared folder');
+            showMessage(`${ownerName}さんが共有している「SNS投稿管理」フォルダに接続しました`, 'success');
+          } else {
+            // どちらにもなければ、マイドライブに新規作成
+            const folderMetadata = {
+              name: FOLDER_NAME,
+              mimeType: 'application/vnd.google-apps.folder'
+            };
+            
+            const folderCreateResponse = await gapi.client.drive.files.create({
+              resource: folderMetadata,
+              fields: 'id'
+            });
+            
+            folderId = folderCreateResponse.result.id;
+            showMessage('マイドライブに「SNS投稿管理」フォルダを作成しました', 'success');
+          }
         }
 
         // フォルダ内のデータファイルを検索
@@ -187,7 +201,7 @@
         
       } catch (error) {
         console.error('Error loading from Drive:', error);
-        showMessage('データの読み込み中にエラーが発生しました', 'error');
+        showMessage('データの読み込み中にエラーが発生しました: ' + error.message, 'error');
       }
     }
 
