@@ -32,6 +32,7 @@
       editingPostId: null,
       isSignedIn: false,
       folderId: null,
+      lastUpdated: null,
       formData: {
         title: '',
         platform: 'x',
@@ -192,6 +193,7 @@
           if (fileContent.body) {
             const data = JSON.parse(fileContent.body);
             state.posts = data.posts || {};
+            state.lastUpdated = data.lastUpdated || null;
             showMessage('Google Driveからデータを読み込みました', 'success');
           }
         }
@@ -218,9 +220,10 @@
       }
 
       try {
+        const now = new Date().toISOString();
         const content = JSON.stringify({
           posts: state.posts,
-          lastUpdated: new Date().toISOString()
+          lastUpdated: now
         });
 
         const file = new Blob([content], { type: 'application/json' });
@@ -246,15 +249,23 @@
           body: form,
         });
 
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Save error:', errorText);
+          throw new Error(`保存に失敗しました: ${response.status}`);
+        }
+
         const result = await response.json();
         if (!fileId) {
           fileId = result.id;
         }
 
+        state.lastUpdated = now;
         showMessage('Google Driveに保存しました！', 'success');
+        render();
       } catch (error) {
         console.error('Error saving to Drive:', error);
-        showMessage('保存に失敗しました', 'error');
+        showMessage('保存に失敗しました: ' + error.message, 'error');
       }
     }
 
@@ -267,6 +278,18 @@
       messageDiv.textContent = message;
       document.body.appendChild(messageDiv);
       setTimeout(() => messageDiv.remove(), 3000);
+    }
+
+    // 日時フォーマット
+    function formatDateTime(isoString) {
+      if (!isoString) return '';
+      const date = new Date(isoString);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}/${month}/${day} ${hours}:${minutes}`;
     }
 
     // 日付フォーマット
@@ -599,6 +622,12 @@
 
       document.getElementById('app').innerHTML = `
         <h1 class="text-4xl font-bold text-gray-800 mb-4 text-center">📱 SNS投稿カレンダー</h1>
+        
+        ${state.lastUpdated ? `
+          <div class="text-right text-sm text-gray-500 mb-2">
+            最終更新: ${formatDateTime(state.lastUpdated)}
+          </div>
+        ` : ''}
         
         <div class="mb-4 text-center">
           ${!state.isSignedIn ? `
