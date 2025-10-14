@@ -26,7 +26,7 @@
     // 共有ドライブ内の既存の親フォルダID（この中に FOLDER_NAME を作成）
     const PARENT_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
 
-    const APP_VERSION = '2025/10/14 21:00';
+    const APP_VERSION = '2025/10/14 22:00';
 
     // =============================
     // 内部状態
@@ -359,6 +359,42 @@
 
     function render() {
       const { daysInMonth, startingDayOfWeek } = getDaysInMonth(state.currentDate);
+      const monthName = state.currentDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
+      const today = new Date();
+      const isCurrentMonth = state.currentDate.getMonth() === today.getMonth() && state.currentDate.getFullYear() === today.getFullYear();
+
+      // === 6週固定の42マスを生成してレイアウトを安定化（スクロール不要想定） ===
+      const totalCells = 42; // 7列×6行
+      const leadingBlanks = startingDayOfWeek;
+      const trailingBlanks = totalCells - (leadingBlanks + daysInMonth);
+
+      const cells = [];
+      for (let i = 0; i < leadingBlanks; i++) cells.push({ type: 'blank' });
+      for (let d = 1; d <= daysInMonth; d++) cells.push({ type: 'day', day: d });
+      for (let i = 0; i < trailingBlanks; i++) cells.push({ type: 'blank' });
+
+      const weekDays = ['日', '月', '火', '水', '木', '金', '土'];
+      const weekHeader = weekDays.map(day => `<div class="text-center font-bold text-gray-600 py-1 text-sm">${day}</div>`).join('');
+
+      const daysHTML = cells.map(cell => {
+        if (cell.type === 'blank') {
+          return `<div class="border rounded-lg bg-white border-gray-200 p-1"></div>`;
+        }
+        const day = cell.day;
+        const dateStr = formatDate(new Date(state.currentDate.getFullYear(), state.currentDate.getMonth(), day));
+        const dayPosts = state.posts[dateStr] || [];
+        const isToday = isCurrentMonth && day === today.getDate();
+        const dayClasses = `border rounded-lg transition-all flex flex-col ${isToday ? 'bg-yellow-100 border-yellow-400 ring-1 ring-yellow-300' : 'bg-white border-gray-200 hover:border-blue-200'}`;
+        const postsHTML = dayPosts.map(post => `
+          <div onclick="openEditForm(${day}, ${post.id})" class="mt-1 text-[11px] bg-white p-1 rounded border border-gray-200 hover:border-blue-400 cursor-pointer transition-all">
+            <div class="flex items-center gap-1">
+              <span class="flex items-center gap-1">${renderPlatformBadges(post.platforms)}</span>
+              <span class="font-semibold text-gray-700 truncate">${post.title || '無題'}</span>
+            </div>
+          </div>`).join('');
+        return `<div class="${dayClasses} p-1">
+          <div class="flex items-center justify-between">
+            <div class="font-semibold ${isToday ? 'text-yellow-700' : 'te = getDaysInMonth(state.currentDate);
       const monthName = state.currentDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
       const today = new Date();
       const isCurrentMonth = state.currentDate.getMonth() === today.getMonth() && state.currentDate.getFullYear() === today.getFullYear();
