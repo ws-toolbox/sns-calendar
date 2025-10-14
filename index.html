@@ -17,6 +17,7 @@
     const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
     const FILE_NAME = 'sns_calendar_data.json';
     const FOLDER_NAME = 'SNS投稿管理';
+    const APP_VERSION = '2025/01/15 15:30'; // アプリのバージョン日時
 
     let gapiInited = false;
     let gisInited = false;
@@ -621,11 +622,16 @@
       }
 
       document.getElementById('app').innerHTML = `
-        <h1 class="text-4xl font-bold text-gray-800 mb-4 text-center">📱 SNS投稿カレンダー</h1>
+        <div class="flex items-center justify-between mb-4">
+          <h1 class="text-4xl font-bold text-gray-800">📱 SNS投稿カレンダー</h1>
+          <div class="text-right text-xs text-gray-400">
+            アプリ更新: ${APP_VERSION}
+          </div>
+        </div>
         
         ${state.lastUpdated ? `
           <div class="text-right text-sm text-gray-500 mb-2">
-            最終更新: ${formatDateTime(state.lastUpdated)}
+            データ最終更新: ${formatDateTime(state.lastUpdated)}
           </div>
         ` : ''}
         
