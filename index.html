@@ -1,1 +1,603 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SNS投稿カレンダー管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js"></script>
+</head>
+<body class="bg-gradient-to-br from-purple-50 to-blue-50 min-h-screen">
+  <div id="app" class="max-w-6xl mx-auto p-4"></div>
 
+  <script>
+    const CLIENT_ID = '912701560065-gufbus97skju6eh9qsca6olaqd2rktjn.apps.googleusercontent.com';
+    const SCOPES = 'https://www.googleapis.com/auth/drive';
+    const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+    const FILE_NAME = 'sns_calendar_data.json';
+    const FOLDER_NAME = 'SNS投稿管理';
+    const SHARED_DRIVE_ID = '1-ri6H6rEmyhBb6GRKKlpMgnIP9SbDBaL';
+
+    let gapiInited = false;
+    let gisInited = false;
+    let tokenClient;
+    let accessToken = null;
+    let fileId = null;
+
+    // アプリの状態
+    let state = {
+      currentDate: new Date(),
+      posts: {},
+      selectedDate: null,
+      editingPostId: null,
+      isSignedIn: false,
+      folderId: null,
+      formData: {
+        title: '',
+        platform: 'x',
+        text: '',
+        images: []
+      }
+    };
+
+    // GAPI初期化
+    function gapiLoaded() {
+      gapi.load('client', initializeGapiClient);
+    }
+
+    async function initializeGapiClient() {
+      await gapi.client.init({
+        discoveryDocs: [DISCOVERY_DOC],
+      });
+      gapiInited = true;
+      maybeEnableButtons();
+    }
+
+    // GIS初期化
+    function gisLoaded() {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: '',
+      });
+      gisInited = true;
+      maybeEnableButtons();
+    }
+
+    function maybeEnableButtons() {
+      if (gapiInited && gisInited) {
+        render();
+      }
+    }
+
+    // Google Drive認証
+    function handleAuthClick() {
+      tokenClient.callback = async (resp) => {
+        if (resp.error !== undefined) {
+          throw (resp);
+        }
+        accessToken = gapi.client.getToken().access_token;
+        state.isSignedIn = true;
+        await loadFromDrive();
+        render();
+      };
+
+      if (gapi.client.getToken() === null) {
+        tokenClient.requestAccessToken({prompt: 'consent'});
+      } else {
+        tokenClient.requestAccessToken({prompt: ''});
+      }
+    }
+
+    // Google Driveからデータ読み込み
+    async function loadFromDrive() {
+      try {
+        // 共有ドライブ内の「SNS投稿管理」フォルダを検索
+        const folderResponse = await gapi.client.drive.files.list({
+          q: `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+          fields: 'files(id, name)',
+          spaces: 'drive',
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
+          corpora: 'drive',
+          driveId: SHARED_DRIVE_ID
+        });
+
+        let folderId;
+        const folders = folderResponse.result.files;
+        
+        if (folders && folders.length > 0) {
+          folderId = folders[0].id;
+        } else {
+          // フォルダが存在しない場合は作成
+          const folderMetadata = {
+            name: FOLDER_NAME,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [SHARED_DRIVE_ID]
+          };
+          
+          const folderCreateResponse = await gapi.client.drive.files.create({
+            resource: folderMetadata,
+            supportsAllDrives: true,
+            fields: 'id'
+          });
+          
+          folderId = folderCreateResponse.result.id;
+          showMessage('「SNS投稿管理」フォルダを共有ドライブに作成しました', 'success');
+        }
+
+        // フォルダ内のデータファイルを検索
+        const response = await gapi.client.drive.files.list({
+          q: `name='${FILE_NAME}' and '${folderId}' in parents and trashed=false`,
+          fields: 'files(id, name)',
+          spaces: 'drive',
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true
+        });
+
+        const files = response.result.files;
+        if (files && files.length > 0) {
+          fileId = files[0].id;
+          const fileContent = await gapi.client.drive.files.get({
+            fileId: fileId,
+            alt: 'media',
+            supportsAllDrives: true
+          });
+          
+          if (fileContent.body) {
+            const data = JSON.parse(fileContent.body);
+            state.posts = data.posts || {};
+            showMessage('共有ドライブからデータを読み込みました', 'success');
+          }
+        }
+        
+        // フォルダIDを保存（後で保存時に使用）
+        state.folderId = folderId;
+        
+      } catch (error) {
+        console.error('Error loading from Drive:', error);
+        showMessage('データの読み込み中にエラーが発生しました', 'error');
+      }
+    }
+
+    // Google Driveへ保存
+    async function saveToDrive() {
+      if (!state.isSignedIn) {
+        showMessage('先にGoogle Driveに接続してください', 'error');
+        return;
+      }
+
+      if (!state.folderId) {
+        showMessage('フォルダ情報の取得中です。しばらくお待ちください', 'error');
+        return;
+      }
+
+      try {
+        const content = JSON.stringify({
+          posts: state.posts,
+          lastUpdated: new Date().toISOString()
+        });
+
+        const file = new Blob([content], { type: 'application/json' });
+        const metadata = {
+          name: FILE_NAME,
+          mimeType: 'application/json',
+          parents: [state.folderId]
+        };
+
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', file);
+
+        const url = fileId 
+          ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&supportsAllDrives=true`
+          : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`;
+
+        const method = fileId ? 'PATCH' : 'POST';
+
+        const response = await fetch(url, {
+          method: method,
+          headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+          body: form,
+        });
+
+        const result = await response.json();
+        if (!fileId) {
+          fileId = result.id;
+        }
+
+        showMessage('共有ドライブに保存しました！', 'success');
+      } catch (error) {
+        console.error('Error saving to Drive:', error);
+        showMessage('保存に失敗しました', 'error');
+      }
+    }
+
+    // メッセージ表示
+    function showMessage(message, type) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${
+        type === 'success' ? 'bg-green-500' : 'bg-red-500'
+      }`;
+      messageDiv.textContent = message;
+      document.body.appendChild(messageDiv);
+      setTimeout(() => messageDiv.remove(), 3000);
+    }
+
+    // 日付フォーマット
+    function formatDate(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+
+    // カレンダー情報取得
+    function getDaysInMonth(date) {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      return {
+        daysInMonth: lastDay.getDate(),
+        startingDayOfWeek: firstDay.getDay()
+      };
+    }
+
+    // 投稿保存
+    async function savePost() {
+      if (!state.formData.title && !state.formData.text) return;
+      
+      const newPost = {
+        ...state.formData,
+        id: state.editingPostId || Date.now()
+      };
+
+      const datePosts = state.posts[state.selectedDate] || [];
+      
+      if (state.editingPostId) {
+        state.posts[state.selectedDate] = datePosts.map(p => 
+          p.id === state.editingPostId ? newPost : p
+        );
+      } else {
+        state.posts[state.selectedDate] = [...datePosts, newPost];
+      }
+      
+      await saveToDrive();
+      cancelEdit();
+      render();
+    }
+
+    // 編集キャンセル
+    function cancelEdit() {
+      state.selectedDate = null;
+      state.editingPostId = null;
+      state.formData = {
+        title: '',
+        platform: 'x',
+        text: '',
+        images: []
+      };
+    }
+
+    // 投稿削除
+    async function deletePost(dateStr, postId) {
+      const datePosts = state.posts[dateStr].filter(p => p.id !== postId);
+      if (datePosts.length === 0) {
+        delete state.posts[dateStr];
+      } else {
+        state.posts[dateStr] = datePosts;
+      }
+      await saveToDrive();
+      cancelEdit();
+      render();
+    }
+
+    // 編集フォーム表示
+    function openEditForm(day, postId = null) {
+      const dateStr = formatDate(new Date(state.currentDate.getFullYear(), state.currentDate.getMonth(), day));
+      state.selectedDate = dateStr;
+      
+      if (postId && state.posts[dateStr]) {
+        const post = state.posts[dateStr].find(p => p.id === postId);
+        if (post) {
+          state.formData = { ...post };
+          state.editingPostId = postId;
+        }
+      } else {
+        state.formData = {
+          title: '',
+          platform: 'x',
+          text: '',
+          images: []
+        };
+        state.editingPostId = null;
+      }
+      
+      render();
+      setTimeout(() => {
+        document.getElementById('editForm')?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+
+    // 画像処理
+    function handleImageSelect(e) {
+      const files = Array.from(e.target.files);
+      if (files.length === 0) return;
+      
+      const remainingSlots = 5 - state.formData.images.length;
+      const filesToProcess = files.slice(0, remainingSlots);
+      
+      let processed = 0;
+      const newImages = [];
+      
+      filesToProcess.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          newImages.push(event.target.result);
+          processed++;
+          
+          if (processed === filesToProcess.length) {
+            state.formData.images = [...state.formData.images, ...newImages];
+            render();
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function removeImage(index) {
+      state.formData.images = state.formData.images.filter((_, i) => i !== index);
+      render();
+    }
+
+    function downloadImage(imageData, title, index) {
+      const link = document.createElement('a');
+      link.href = imageData;
+      link.download = `${title || 'image'}_${index + 1}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        showMessage('コピーしました！', 'success');
+      });
+    }
+
+    // レンダリング
+    function render() {
+      const { daysInMonth, startingDayOfWeek } = getDaysInMonth(state.currentDate);
+      const monthName = state.currentDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
+      const today = new Date();
+      const isCurrentMonth = state.currentDate.getMonth() === today.getMonth() && 
+                            state.currentDate.getFullYear() === today.getFullYear();
+
+      const platformBadges = {
+        x: { label: '𝕏', color: 'bg-black' },
+        instagram: { label: 'IG', color: 'bg-gradient-to-r from-purple-500 to-pink-500' },
+        line: { label: 'LINE', color: 'bg-green-500' }
+      };
+
+      let calendarHTML = '';
+      const weekDays = ['日', '月', '火', '水', '木', '金', '土'];
+      
+      weekDays.forEach(day => {
+        calendarHTML += `<div class="text-center font-bold text-gray-600 py-2">${day}</div>`;
+      });
+
+      for (let i = 0; i < startingDayOfWeek; i++) {
+        calendarHTML += '<div class="p-2"></div>';
+      }
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = formatDate(new Date(state.currentDate.getFullYear(), state.currentDate.getMonth(), day));
+        const dayPosts = state.posts[dateStr] || [];
+        const hasPosts = dayPosts.length > 0;
+        const isToday = isCurrentMonth && day === today.getDate();
+
+        calendarHTML += `
+          <div class="p-2 min-h-24 border rounded-lg transition-all ${
+            isToday 
+              ? 'bg-yellow-100 border-yellow-400 ring-2 ring-yellow-300' 
+              : hasPosts 
+                ? 'bg-blue-50 border-blue-300' 
+                : 'bg-white border-gray-200 hover:border-blue-200'
+          }">
+            <div class="font-semibold mb-2 ${isToday ? 'text-yellow-700' : 'text-gray-700'}">
+              ${day}${isToday ? '<span class="ml-1 text-xs">●</span>' : ''}
+            </div>
+            <div class="space-y-1">
+              ${dayPosts.map(post => {
+                const badge = platformBadges[post.platform];
+                return `
+                  <div onclick="openEditForm(${day}, ${post.id})" 
+                       class="text-xs bg-white p-2 rounded border border-gray-200 hover:border-blue-400 cursor-pointer transition-all hover:shadow-sm">
+                    <div class="flex items-center gap-1">
+                      <span class="${badge.color} text-white px-1.5 py-0.5 rounded text-[10px]">${badge.label}</span>
+                      <span class="font-semibold text-gray-700 truncate">${post.title || '無題'}</span>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+              <button onclick="openEditForm(${day})" 
+                      class="w-full text-xs text-blue-500 hover:text-blue-700 py-1 flex items-center justify-center gap-1 hover:bg-blue-50 rounded transition-colors">
+                <span>+</span> 追加
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      let editFormHTML = '';
+      if (state.selectedDate) {
+        const platformButtons = [
+          { value: 'x', label: '𝕏', color: 'bg-black' },
+          { value: 'instagram', label: 'Instagram', color: 'bg-gradient-to-r from-purple-500 to-pink-500' },
+          { value: 'line', label: 'LINE', color: 'bg-green-500' }
+        ];
+
+        editFormHTML = `
+          <div id="editForm" class="bg-white rounded-2xl shadow-xl p-6 mt-6">
+            <div class="flex items-center justify-between mb-6">
+              <h3 class="text-2xl font-bold text-gray-800">
+                ${state.editingPostId ? '投稿を編集' : '新規投稿'} - ${state.selectedDate}
+              </h3>
+              <button onclick="cancelEdit(); render();" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                <span class="text-2xl">×</span>
+              </button>
+            </div>
+
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">投稿タイトル（管理用）</label>
+                <input type="text" id="titleInput" value="${state.formData.title}" 
+                       onchange="state.formData.title = this.value"
+                       placeholder="例: 新商品告知、キャンペーン案内"
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">投稿先SNS</label>
+                <div class="flex gap-3">
+                  ${platformButtons.map(platform => `
+                    <button onclick="state.formData.platform = '${platform.value}'; render();"
+                            class="flex-1 py-3 px-4 rounded-lg font-semibold text-white transition-all ${
+                              state.formData.platform === platform.value
+                                ? `${platform.color} ring-4 ring-offset-2 ring-blue-300`
+                                : 'bg-gray-300 hover:bg-gray-400'
+                            }">
+                      ${platform.label}
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">投稿テキスト</label>
+                <textarea id="textInput" onchange="state.formData.text = this.value"
+                          placeholder="投稿する文章を入力...&#10;&#10;ハッシュタグもここに直接記述できます！&#10;例: #マーケティング #SNS"
+                          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          rows="6">${state.formData.text}</textarea>
+              </div>
+
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                  画像（最大5枚）
+                  <span class="ml-2 text-xs text-gray-500">${state.formData.images.length} / 5</span>
+                </label>
+                <div class="border-2 border-dashed rounded-lg p-6 text-center border-gray-300 hover:border-blue-400">
+                  ${state.formData.images.length > 0 ? `
+                    <div>
+                      <div class="grid grid-cols-3 gap-3 mb-4">
+                        ${state.formData.images.map((image, index) => `
+                          <div class="relative group">
+                            <img src="${image}" alt="画像 ${index + 1}" class="w-full h-32 object-cover rounded-lg">
+                            <div class="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onclick="downloadImage('${image}', state.formData.title, ${index})"
+                                      class="bg-blue-500 text-white p-1.5 rounded-full hover:bg-blue-600 transition-colors shadow-lg">
+                                ⬇
+                              </button>
+                              <button onclick="removeImage(${index})"
+                                      class="bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 transition-colors shadow-lg">
+                                ×
+                              </button>
+                            </div>
+                          </div>
+                        `).join('')}
+                      </div>
+                      ${state.formData.images.length < 5 ? `
+                        <label class="inline-block bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer transition-colors text-sm">
+                          + さらに画像を追加
+                          <input type="file" accept="image/*" multiple onchange="handleImageSelect(event)" class="hidden">
+                        </label>
+                      ` : ''}
+                    </div>
+                  ` : `
+                    <div>
+                      <p class="text-gray-600 mb-2">📸 画像を選択（最大5枚）</p>
+                      <label class="inline-block bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg cursor-pointer transition-colors">
+                        ファイルを選択
+                        <input type="file" accept="image/*" multiple onchange="handleImageSelect(event)" class="hidden">
+                      </label>
+                    </div>
+                  `}
+                </div>
+              </div>
+
+              <div class="bg-gray-50 p-4 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="font-semibold text-gray-800">投稿内容プレビュー</h4>
+                  <button onclick="copyToClipboard(state.formData.text)"
+                          class="flex items-center gap-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors">
+                    📋 テキストをコピー
+                  </button>
+                </div>
+                <div class="bg-white p-4 rounded border border-gray-200 min-h-24">
+                  <p class="text-gray-700 whitespace-pre-wrap">${state.formData.text || 'テキストを入力すると、ここにプレビューが表示されます'}</p>
+                </div>
+              </div>
+
+              <div class="flex gap-3 pt-2">
+                <button onclick="savePost()" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold transition-colors">
+                  ${state.editingPostId ? '更新' : '保存'}
+                </button>
+                ${state.editingPostId ? `
+                  <button onclick="deletePost('${state.selectedDate}', ${state.editingPostId})"
+                          class="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+                    🗑 削除
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      document.getElementById('app').innerHTML = `
+        <h1 class="text-4xl font-bold text-gray-800 mb-4 text-center">📱 SNS投稿カレンダー</h1>
+        
+        <div class="mb-4 text-center">
+          ${!state.isSignedIn ? `
+            <button onclick="handleAuthClick()" 
+                    class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors shadow-lg">
+              🔗 Google Driveに接続
+            </button>
+            <p class="text-sm text-gray-600 mt-2">データをGoogle Driveに自動保存します</p>
+          ` : `
+            <div class="inline-flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-lg">
+              ✅ Google Driveに接続済み - 自動保存が有効です
+            </div>
+          `}
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-xl p-6 mb-6">
+          <div class="flex items-center justify-between mb-6">
+            <button onclick="state.currentDate.setMonth(state.currentDate.getMonth() - 1); render();" 
+                    class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              ◀
+            </button>
+            <h2 class="text-2xl font-bold text-gray-800">${monthName}</h2>
+            <button onclick="state.currentDate.setMonth(state.currentDate.getMonth() + 1); render();" 
+                    class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              ▶
+            </button>
+          </div>
+
+          <div class="grid grid-cols-7 gap-2">
+            ${calendarHTML}
+          </div>
+        </div>
+
+        ${editFormHTML}
+      `;
+    }
+
+    // 初期化
+    window.addEventListener('load', () => {
+      gapiLoaded();
+      gisLoaded();
+      render();
+    });
+  </script>
+</body>
+</html>
