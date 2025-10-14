@@ -18,7 +18,7 @@
     const FILE_NAME = 'sns_calendar_data.json';
     const FOLDER_NAME = 'SNS投稿管理';
     const SHARED_DRIVE_ID = '1-ri6H6rEmyhBb6GRKKlpMgnIP9SbDBaL';
-    const APP_VERSION = '2025/01/15 16:30'; // アプリのバージョン日時
+    const APP_VERSION = '2025/01/15 16:40'; // アプリのバージョン日時
 
     let gapiInited = false;
     let gisInited = false;
@@ -251,6 +251,10 @@
         const url = fileId 
           ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&supportsAllDrives=true`
           : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`;
+
+        console.log('Saving to Drive, URL:', url);
+        console.log('File ID:', fileId);
+        console.log('Folder ID:', state.folderId);
 
         const method = fileId ? 'PATCH' : 'POST';
 
