@@ -37,7 +37,7 @@
             isSaving: false,
             folderId: null,
             lastUpdated: null,
-            formData: {title: '', platforms: [], text: '', images: [], checks: []}
+            formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: []}
         };
 
         function gapiLoaded() {
@@ -302,7 +302,7 @@
             state.selectedDate = null;
             state.editingPostId = null;
             state.viewMode = 'edit';
-            state.formData = {title: '', platforms: [], text: '', images: [], checks: []};
+            state.formData = {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: []};
         }
 
         async function deletePost(dateStr, postId) {
@@ -330,6 +330,10 @@
                     }
                     if (!state.formData.checks) {
                         state.formData.checks = [];
+                    }
+                    if (!state.formData.completedChecks) {
+                        state.formData.completedChecks = [];
+                    }
                     }
                     state.editingPostId = postId;
                     state.viewMode = 'view';
@@ -416,6 +420,22 @@
         
         function removeCheck(index) {
             state.formData.checks = state.formData.checks.filter((_, i) => i !== index);
+            render();
+        }
+
+        function toggleCheckCompletion(checkText) {
+            if (!state.formData.completedChecks) {
+                state.formData.completedChecks = [];
+            }
+            
+            if (state.formData.completedChecks.includes(checkText)) {
+                state.formData.completedChecks = state.formData.completedChecks.filter(c => c !== checkText);
+            } else {
+                state.formData.completedChecks.push(checkText);
+            }
+            
+            // 自動保存
+            saveToDrive();
             render();
         }
 
@@ -518,9 +538,12 @@
                                 <div>
                                     <div class="text-sm text-gray-500 mb-1">チェック</div>
                                     <div class="flex gap-2 flex-wrap">
-                                        ${state.formData.checks.map(check => `
-                                            <span class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm">${check}</span>
-                                        `).join('')}
+                                        ${state.formData.checks.map(check => {
+                                            const isCompleted = state.formData.completedChecks && state.formData.completedChecks.includes(check);
+                                            return `<button onclick="toggleCheckCompletion('${check.replace(/'/g, "\\'")}')" class="px-3 py-1 rounded text-sm inline-flex items-center gap-2 transition-colors ${isCompleted ? 'bg-green-200 text-green-800 line-through' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}">
+                                                ${isCompleted ? '✓' : '○'} ${check}
+                                            </button>`;
+                                        }).join('')}
                                     </div>
                                 </div>
                             ` : ''}
