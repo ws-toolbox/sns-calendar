@@ -15,7 +15,7 @@
         const CLIENT_ID = '417822818519-8imosvo7c9e2gem7cp0rse0vm8vrjlou.apps.googleusercontent.com';
         const SCOPES = 'https://www.googleapis.com/auth/drive';
         const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
-        const FILE_NAME = 'sns_calendar_data.json';
+        const FILE_NAME = getCurrentYearFileName();
         const FOLDER_NAME = 'SNS投稿管理';
         const SHARED_DRIVE_ID = '0AHJk3pS7tSEgUk9PVA';
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
@@ -40,6 +40,11 @@
             formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: []}
         };
 
+        function getCurrentYearFileName() {
+            const currentYear = new Date().getFullYear();
+            return `sns_calendar_data_${currentYear}.json`;
+        }
+
         function gapiLoaded() {
             gapi.load('client', initializeGapiClient);
         }
@@ -50,6 +55,38 @@
             });
             gapiInited = true;
             maybeEnableButtons();
+        }
+
+        async function uploadMediaToDrive(file) {
+            if (!state.isSignedIn) return null;
+        
+            try {
+                const metadata = {
+                    name: file.name,
+                    parents: [VIDEO_FOLDER_ID] // 動画用のフォルダIDを定義
+                };
+        
+                const form = new FormData();
+                form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+                form.append('file', file);
+        
+                const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+                    method: 'POST',
+                    headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+                    body: form
+                });
+        
+                if (!response.ok) {
+                    throw new Error(`アップロードに失敗: ${response.status}`);
+                }
+        
+                const result = await response.json();
+                return result.id; // アップロードしたファイルのID
+            } catch (error) {
+                console.error('メディアアップロードエラー:', error);
+                showMessage('メディアのアップロードに失敗', 'error');
+                return null;
+            }
         }
 
         function gisLoaded() {
@@ -284,6 +321,12 @@
             const newPost = {
                 ...state.formData,
                 id: state.editingPostId || Date.now(),
+                images: state.formData.images.map(file => ({
+                    type: file.type,
+                    name: file.name,
+                    size: file.data.length,
+                    uploadDate: new Date().toISOString()
+                })),
                 checks: state.formData.checks || [],
                 completedChecks: state.formData.completedChecks || []
             };
