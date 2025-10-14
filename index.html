@@ -19,7 +19,7 @@
         const FOLDER_NAME = 'SNS投稿管理';
         const SHARED_DRIVE_ID = '0AHJk3pS7tSEgUk9PVA';
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
-        const APP_VERSION = '2025/01/15 17:15';
+        const APP_VERSION = '2025/01/14 23:15';
 
         let gapiInited = false;
         let gisInited = false;
@@ -280,19 +280,21 @@
 
         async function savePost() {
             if (!state.formData.title && !state.formData.text) return;
-
+        
             const newPost = {
                 ...state.formData,
-                id: state.editingPostId || Date.now()
+                id: state.editingPostId || Date.now(),
+                checks: state.formData.checks || [],
+                completedChecks: state.formData.completedChecks || []
             };
-
+        
             const datePosts = state.posts[state.selectedDate] || [];
             if (state.editingPostId) {
                 state.posts[state.selectedDate] = datePosts.map(p => p.id === state.editingPostId ? newPost : p);
             } else {
                 state.posts[state.selectedDate] = [...datePosts, newPost];
             }
-
+        
             await saveToDrive();
             cancelEdit();
             render();
@@ -423,6 +425,28 @@
             render();
         }
 
+        function addViewCheck(inputId) {
+            const input = document.getElementById(inputId);
+            const value = input.value.trim();
+            
+            if (!state.formData.checks) {
+                state.formData.checks = [];
+            }
+            
+            if (value && !state.formData.checks.includes(value)) {
+                state.formData.checks.push(value);
+                input.value = '';
+                saveToDrive(); // 自動保存
+                render();
+            }
+        }
+        
+        function removeViewCheck(index) {
+            state.formData.checks = state.formData.checks.filter((_, i) => i !== index);
+            saveToDrive(); // 自動保存
+            render();
+        }
+
       function render() {
             const { daysInMonth, startingDayOfWeek } = getDaysInMonth(state.currentDate);
             const monthName = state.currentDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
@@ -520,15 +544,23 @@
                             </div>
                             ${state.formData.checks && state.formData.checks.length > 0 ? `
                                 <div>
-                                    <div class="text-sm text-gray-500 mb-1">チェック</div>
-                                    <div class="flex gap-2 flex-wrap">
-                                        ${state.formData.checks.map(check => {
-                                            const isCompleted = state.formData.completedChecks && state.formData.completedChecks.includes(check);
-                                            return `<button onclick="toggleCheckCompletion('${check.replace(/'/g, "\\'")}')" class="px-3 py-1 rounded text-sm inline-flex items-center gap-2 transition-colors ${isCompleted ? 'bg-green-200 text-green-800 line-through' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}">
-                                                ${isCompleted ? '✓' : '○'} ${check}
-                                            </button>`;
-                                        }).join('')}
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">チェック</label>
+                                    <div class="flex gap-2 mb-2">
+                                        <input type="text" id="viewCheckInput" placeholder="チェック項目を入力" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" onkeypress="if(event.key==='Enter'){addViewCheck('viewCheckInput'); event.preventDefault();}">
+                                        <button onclick="addViewCheck('viewCheckInput')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                                            追加
+                                        </button>
                                     </div>
+                                    ${state.formData.checks && state.formData.checks.length > 0 ? `
+                                        <div class="flex gap-2 flex-wrap">
+                                            ${state.formData.checks.map((check, index) => `
+                                                <span class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm inline-flex items-center gap-2">
+                                                    ${check}
+                                                    <button onclick="removeViewCheck(${index})" class="text-red-500 hover:text-red-700 font-bold">×</button>
+                                                </span>
+                                            `).join('')}
+                                        </div>
+                                    ` : ''}
                                 </div>
                             ` : ''}
                             ${state.formData.images && state.formData.images.length > 0 ? `
