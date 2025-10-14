@@ -17,7 +17,7 @@
     const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
     const FILE_NAME = 'sns_calendar_data.json';
     const FOLDER_NAME = 'SNS投稿管理';
-    const APP_VERSION = '2025/01/15 16:20'; // アプリのバージョン日時
+    const APP_VERSION = '2025/01/15 16:25'; // アプリのバージョン日時
 
     let gapiInited = false;
     let gisInited = false;
@@ -33,6 +33,7 @@
       editingPostId: null,
       viewMode: 'edit', // 'edit' or 'view'
       isSignedIn: false,
+      isSaving: false, // 保存中フラグ
       folderId: null,
       lastUpdated: null,
       formData: {
@@ -221,6 +222,13 @@
         return;
       }
 
+      if (state.isSaving) {
+        return; // 既に保存中の場合は何もしない
+      }
+
+      state.isSaving = true;
+      render(); // 保存中表示を更新
+
       try {
         const now = new Date().toISOString();
         const content = JSON.stringify({
@@ -264,10 +272,12 @@
 
         state.lastUpdated = now;
         showMessage('Google Driveに保存しました！', 'success');
-        render();
       } catch (error) {
         console.error('Error saving to Drive:', error);
         showMessage('保存に失敗しました: ' + error.message, 'error');
+      } finally {
+        state.isSaving = false;
+        render();
       }
     }
 
@@ -663,8 +673,10 @@
                 </div>
 
                 <div class="flex gap-3 pt-2">
-                  <button onclick="savePost()" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold transition-colors">
-                    ${state.editingPostId ? '更新' : '保存'}
+                  <button onclick="savePost()" 
+                          ${state.isSaving ? 'disabled' : ''}
+                          class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold transition-colors ${state.isSaving ? 'opacity-50 cursor-not-allowed' : ''}">
+                    ${state.isSaving ? '⏳ 保存中...' : (state.editingPostId ? '更新' : '保存')}
                   </button>
                 </div>
               </div>
