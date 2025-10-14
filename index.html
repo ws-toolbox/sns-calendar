@@ -17,7 +17,8 @@
     const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
     const FILE_NAME = 'sns_calendar_data.json';
     const FOLDER_NAME = 'SNS投稿管理';
-    const APP_VERSION = '2025/01/15 16:25'; // アプリのバージョン日時
+    const SHARED_DRIVE_ID = '1-ri6H6rEmyhBb6GRKKlpMgnIP9SbDBaL';
+    const APP_VERSION = '2025/01/15 16:30'; // アプリのバージョン日時
 
     let gapiInited = false;
     let gisInited = false;
@@ -248,8 +249,8 @@
         form.append('file', file);
 
         const url = fileId 
-          ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
-          : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+          ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&supportsAllDrives=true`
+          : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`;
 
         const method = fileId ? 'PATCH' : 'POST';
 
