@@ -13,11 +13,10 @@
 
   <script>
     const CLIENT_ID = '912701560065-gufbus97skju6eh9qsca6olaqd2rktjn.apps.googleusercontent.com';
-    const SCOPES = 'https://www.googleapis.com/auth/drive';
+    const SCOPES = 'https://www.googleapis.com/auth/drive.file';
     const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
     const FILE_NAME = 'sns_calendar_data.json';
     const FOLDER_NAME = 'SNS投稿管理';
-    const SHARED_DRIVE_ID = '1-ri6H6rEmyhBb6GRKKlpMgnIP9SbDBaL';
 
     let gapiInited = false;
     let gisInited = false;
@@ -93,15 +92,11 @@
     // Google Driveからデータ読み込み
     async function loadFromDrive() {
       try {
-        // 共有ドライブ内の「SNS投稿管理」フォルダを検索
+        // マイドライブ内の「SNS投稿管理」フォルダを検索
         const folderResponse = await gapi.client.drive.files.list({
           q: `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
           fields: 'files(id, name)',
-          spaces: 'drive',
-          supportsAllDrives: true,
-          includeItemsFromAllDrives: true,
-          corpora: 'drive',
-          driveId: SHARED_DRIVE_ID
+          spaces: 'drive'
         });
 
         let folderId;
@@ -113,27 +108,23 @@
           // フォルダが存在しない場合は作成
           const folderMetadata = {
             name: FOLDER_NAME,
-            mimeType: 'application/vnd.google-apps.folder',
-            parents: [SHARED_DRIVE_ID]
+            mimeType: 'application/vnd.google-apps.folder'
           };
           
           const folderCreateResponse = await gapi.client.drive.files.create({
             resource: folderMetadata,
-            supportsAllDrives: true,
             fields: 'id'
           });
           
           folderId = folderCreateResponse.result.id;
-          showMessage('「SNS投稿管理」フォルダを共有ドライブに作成しました', 'success');
+          showMessage('マイドライブに「SNS投稿管理」フォルダを作成しました', 'success');
         }
 
         // フォルダ内のデータファイルを検索
         const response = await gapi.client.drive.files.list({
           q: `name='${FILE_NAME}' and '${folderId}' in parents and trashed=false`,
           fields: 'files(id, name)',
-          spaces: 'drive',
-          supportsAllDrives: true,
-          includeItemsFromAllDrives: true
+          spaces: 'drive'
         });
 
         const files = response.result.files;
@@ -141,14 +132,13 @@
           fileId = files[0].id;
           const fileContent = await gapi.client.drive.files.get({
             fileId: fileId,
-            alt: 'media',
-            supportsAllDrives: true
+            alt: 'media'
           });
           
           if (fileContent.body) {
             const data = JSON.parse(fileContent.body);
             state.posts = data.posts || {};
-            showMessage('共有ドライブからデータを読み込みました', 'success');
+            showMessage('Google Driveからデータを読み込みました', 'success');
           }
         }
         
@@ -191,8 +181,8 @@
         form.append('file', file);
 
         const url = fileId 
-          ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&supportsAllDrives=true`
-          : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`;
+          ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
+          : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
 
         const method = fileId ? 'PATCH' : 'POST';
 
@@ -207,7 +197,7 @@
           fileId = result.id;
         }
 
-        showMessage('共有ドライブに保存しました！', 'success');
+        showMessage('Google Driveに保存しました！', 'success');
       } catch (error) {
         console.error('Error saving to Drive:', error);
         showMessage('保存に失敗しました', 'error');
