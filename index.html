@@ -37,7 +37,7 @@
             isSaving: false,
             folderId: null,
             lastUpdated: null,
-            formData: {title: '', platforms: [], text: '', images: []}
+            formData: {title: '', platforms: [], text: '', images: [], checks: []}
         };
 
         function gapiLoaded() {
@@ -302,7 +302,7 @@
             state.selectedDate = null;
             state.editingPostId = null;
             state.viewMode = 'edit';
-            state.formData = {title: '', platforms: [], text: '', images: []};
+            state.formData = {title: '', platforms: [], text: '', images: [], checks: []};
         }
 
         async function deletePost(dateStr, postId) {
@@ -328,11 +328,14 @@
                     if (!state.formData.platforms && state.formData.platform) {
                         state.formData.platforms = [state.formData.platform];
                     }
+                    if (!state.formData.checks) {
+                        state.formData.checks = [];
+                    }
                     state.editingPostId = postId;
                     state.viewMode = 'view';
                 }
             } else {
-                state.formData = {title: '', platforms: [], text: '', images: []};
+                state.formData = {title: '', platforms: [], text: '', images: [], checks: []};
                 state.editingPostId = null;
                 state.viewMode = 'edit';
             }
@@ -399,6 +402,21 @@
             navigator.clipboard.writeText(text).then(() => {
                 showMessage('コピーしました！', 'success');
             });
+        }
+
+        function addCheck(inputId) {
+            const input = document.getElementById(inputId);
+            const value = input.value.trim();
+            if (value && !state.formData.checks.includes(value)) {
+                state.formData.checks.push(value);
+                input.value = '';
+                render();
+            }
+        }
+        
+        function removeCheck(index) {
+            state.formData.checks = state.formData.checks.filter((_, i) => i !== index);
+            render();
         }
 
       function render() {
@@ -491,11 +509,41 @@
                             </div>
                             <div>
                                 <div class="text-sm text-gray-500 mb-1">投稿テキスト</div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">チェック</label>
+                                <div class="flex gap-2 mb-2">
+                                    <input type="text" id="checkInput" placeholder="チェック項目を入力" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" onkeypress="if(event.key==='Enter'){addCheck('checkInput'); event.preventDefault();}">
+                                    <button onclick="addCheck('checkInput')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                                        追加
+                                    </button>
+                                </div>
+                                ${state.formData.checks && state.formData.checks.length > 0 ? `
+                                    <div class="flex gap-2 flex-wrap">
+                                        ${state.formData.checks.map((check, index) => `
+                                            <span class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm inline-flex items-center gap-2">
+                                                ${check}
+                                                <button onclick="removeCheck(${index})" class="text-red-500 hover:text-red-700 font-bold">×</button>
+                                            </span>
+                                        `).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                            <div>
                                 <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 whitespace-pre-wrap">${state.formData.text || 'テキストなし'}</div>
-                                <button onclick="copyToClipboard(\`${state.formData.text}\`)" class="mt-2 w-full flex items-center justify-center gap-2 bg-gray-400 text-white py-2 rounded-lg hover:bg-gray-500 transition-colors">
+                                <button onclick="copyToClipboard(\`${state.formData.text}\`)" class="mt-2 w-full flex items-center justify-center gap-2 bg-gray-300 text-gray-600 py-2 rounded-lg hover:bg-gray-400 transition-colors text-sm">
                                     📋 テキストをコピー
                                 </button>
                             </div>
+                            ${state.formData.checks && state.formData.checks.length > 0 ? `
+                                <div>
+                                    <div class="text-sm text-gray-500 mb-1">チェック</div>
+                                    <div class="flex gap-2 flex-wrap">
+                                        ${state.formData.checks.map(check => `
+                                            <span class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm">${check}</span>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            ` : ''}
                             ${state.formData.images && state.formData.images.length > 0 ? `
                                 <div>
                                     <div class="text-sm text-gray-500 mb-2">画像（${state.formData.images.length}枚）</div>
@@ -592,12 +640,12 @@
             }
 
             document.getElementById('app').innerHTML = `
-                <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center justify-between mb-2">
                     <h1 class="text-4xl font-bold text-gray-800">📱 SNS投稿カレンダー</h1>
                     <div class="text-right text-xs text-gray-400">アプリ更新: ${APP_VERSION}</div>
                 </div>
-                ${state.lastUpdated ? `<div class="text-right text-sm text-gray-500 mb-2">データ最終更新: ${formatDateTime(state.lastUpdated)}</div>` : ''}
-                <div class="mb-4 text-center">
+                ${state.lastUpdated ? `<div class="text-right text-sm text-gray-500 mb-1">データ最終更新: ${formatDateTime(state.lastUpdated)}</div>` : ''}
+                <div class="mb-2 text-center">
                     ${!state.isSignedIn ? `
                         <button onclick="handleAuthClick()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors shadow-lg">
                             🔗 Google Driveに接続
