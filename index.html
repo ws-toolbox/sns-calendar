@@ -884,8 +884,9 @@
                                 🔗 Google Driveに接続
                             </button>
                         `}
-                        ${state.lastUpdated ? `<div class="text-xs text-gray-400">最終更新: ${formatDateTime(state.lastUpdated)}</div>` : ''}
-                        <div class="text-xs text-gray-400">アプリ更新: ${APP_VERSION}</div>
+                        <div class="text-xs text-gray-400">
+                            ${state.lastUpdated ? `最終更新: ${formatDateTime(state.lastUpdated)}　` : ''}アプリ更新: ${APP_VERSION}
+                        </div>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
