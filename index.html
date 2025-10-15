@@ -371,16 +371,23 @@
         async function savePost() {
             if (!state.formData.title && !state.formData.text) return;
         
-            console.log('保存する画像の数:', state.formData.images.length);
-            
+            // 画像と動画を分離
+            const imageFiles = state.formData.images.filter(file => file.type === 'image');
+            const videoFiles = state.formData.images.filter(file => file.type === 'video');
+        
             const newPost = {
                 ...state.formData,
                 id: state.editingPostId || Date.now(),
-                images: state.formData.images.map(file => ({
+                images: imageFiles.map(file => ({
                     type: file.type,
                     name: file.name,
                     size: file.data ? file.data.length : 0,
-                    data: file.data,  // dataを含める
+                    data: file.data,
+                    uploadDate: new Date().toISOString()
+                })),
+                videoPaths: videoFiles.slice(0, 3).map(file => ({
+                    name: file.name,
+                    path: '', // ここにファイルパスやURLを手動で入力
                     uploadDate: new Date().toISOString()
                 })),
                 checks: state.formData.checks || [],
@@ -394,12 +401,25 @@
                 state.posts[state.selectedDate] = [...datePosts, newPost];
             }
         
-            console.log('保存するポストの詳細:', newPost);
-        
             await saveToDrive();
             cancelEdit();
             render();
         }
+        
+        // render関数の動画パス表示部分
+        ${state.formData.videoPaths && state.formData.videoPaths.length > 0 ? `
+            <div>
+                <div class="text-sm text-gray-500 mb-2">動画パス（${state.formData.videoPaths.length}本）</div>
+                <div class="space-y-2">
+                    ${state.formData.videoPaths.map((videoPath, index) => `
+                        <div class="bg-gray-100 p-2 rounded-lg">
+                            <div class="text-sm font-semibold">${videoPath.name}</div>
+                            <div class="text-xs text-gray-600">${videoPath.path || 'パスが設定されていません'}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        ` : ''}
 
         function cancelEdit() {
             state.selectedDate = null;
@@ -793,6 +813,23 @@
                                     `}
                                 </div>
                             </div>
+                            // 追加する動画パス入力コンポーネント
+                            ${state.formData.videoPaths && state.formData.videoPaths.length > 0 ? `
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">動画パス（最大3つ）</label>
+                                    ${state.formData.videoPaths.map((videoPath, index) => `
+                                        <div class="mb-2">
+                                            <input 
+                                                type="text" 
+                                                value="${videoPath.path}" 
+                                                onchange="state.formData.videoPaths[${index}].path = this.value" 
+                                                placeholder="動画のファイルパスまたはURL" 
+                                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            >
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
                             <div class="flex gap-3 pt-2">
                                 <button onclick="savePost()" ${state.isSaving ? 'disabled' : ''} class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold transition-colors ${state.isSaving ? 'opacity-50 cursor-not-allowed' : ''}">
                                     ${state.isSaving ? '⏳ 保存中...' : (state.editingPostId ? '更新' : '保存')}
