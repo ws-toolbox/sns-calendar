@@ -19,7 +19,7 @@
         const FOLDER_NAME = 'SNS投稿管理';
         const SHARED_DRIVE_ID = '0AHJk3pS7tSEgUk9PVA';
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
-        const APP_VERSION = '2025/01/15 15:05';
+        const APP_VERSION = '2025/01/15 15:10';
 
         let gapiInited = false;
         let gisInited = false;
@@ -856,25 +856,26 @@
             }
 
             document.getElementById('app').innerHTML = `
-                <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center justify-between mb-3">
                     <h1 class="text-3xl font-bold text-gray-800">📱 SNS投稿カレンダー</h1>
-                    <div class="text-right text-xs text-gray-400">アプリ更新: ${APP_VERSION}</div>
-                </div>
-                <div class="mb-2 text-center">
-                    ${!state.isSignedIn ? `
-                        <button onclick="handleAuthClick()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-lg text-sm">
-                            🔗 Google Driveに接続
-                        </button>
-                    ` : `
-                        <div class="inline-flex items-center gap-2">
-                            <div class="inline-flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1 rounded-lg text-sm">
-                                ✅ 共有ドライブ接続済
+                    <div class="flex flex-col items-end gap-1">
+                        ${state.isSignedIn ? `
+                            <div class="flex items-center gap-2">
+                                <div class="inline-flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1 rounded-lg text-xs">
+                                    ✅ 共有ドライブ接続済
+                                </div>
+                                <button onclick="handleSignOut()" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-xs transition-colors">
+                                    ログアウト
+                                </button>
                             </div>
-                            <button onclick="handleSignOut()" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-sm transition-colors">
-                                ログアウト
+                        ` : `
+                            <button onclick="handleAuthClick()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-lg text-sm">
+                                🔗 Google Driveに接続
                             </button>
-                        </div>
-                    `}
+                        `}
+                        ${state.lastUpdated ? `<div class="text-xs text-gray-400">最終更新: ${formatDateTime(state.lastUpdated)}</div>` : ''}
+                        <div class="text-xs text-gray-400">アプリ更新: ${APP_VERSION}</div>
+                    </div>
                 </div>
                 ${state.lastUpdated ? `<div class="text-right text-xs text-gray-500 mb-1">最終更新: ${formatDateTime(state.lastUpdated)}</div>` : ''}
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
