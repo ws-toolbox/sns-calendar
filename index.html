@@ -21,7 +21,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/15 16:15';
+        const APP_VERSION = '2025/01/15 16:20';
 
         let gapiInited = false;
         let gisInited = false;
@@ -329,27 +329,19 @@
                     corpora: 'drive',
                     driveId: SHARED_DRIVE_ID
                 });
-
+        
                 if (folderResponse.result.files && folderResponse.result.files.length > 0) {
                     folderId = folderResponse.result.files[0].id;
                     console.log('✅ 指定フォルダ内でフォルダ発見');
                     showMessage('指定フォルダ内のフォルダに接続しました', 'success');
                 } else {
-                    console.log('📝 フォルダ未発見、指定フォルダに新規作成...');
-                    const folderCreateResponse = await gapi.client.drive.files.create({
-                        resource: {
-                            name: FOLDER_NAME,
-                            mimeType: 'application/vnd.google-apps.folder',
-                            parents: [TARGET_FOLDER_ID]
-                        },
-                        supportsAllDrives: true,
-                        fields: 'id'
-                    });
-                    folderId = folderCreateResponse.result.id;
-                    console.log('✅ 指定フォルダにフォルダ作成完了');
-                    showMessage('指定フォルダに「SNS投稿管理」フォルダを作成しました', 'success');
+                    console.log('❌ フォルダが見つかりません');
+                    showMessage('「SNS投稿管理」フォルダが見つかりません。管理者に連絡してください。', 'error');
+                    state.isSignedIn = false;
+                    handleSignOut();
+                    return;
                 }
-
+        
                 const response = await gapi.client.drive.files.list({
                     q: `name='${FILE_NAME}' and '${folderId}' in parents and trashed=false`,
                     fields: 'files(id, name)',
@@ -357,7 +349,7 @@
                     supportsAllDrives: true,
                     includeItemsFromAllDrives: true
                 });
-
+        
                 const files = response.result.files;
                 if (files && files.length > 0) {
                     fileId = files[0].id;
@@ -366,7 +358,7 @@
                         alt: 'media',
                         supportsAllDrives: true
                     });
-
+        
                     if (fileContent.body) {
                         const data = JSON.parse(fileContent.body);
                         state.posts = data.posts || {};
@@ -374,8 +366,12 @@
                         console.log('✅ 共有ドライブからデータ読み込み成功');
                         showMessage('共有ドライブからデータを読み込みました', 'success');
                     }
+                } else {
+                    // JSONファイルが見つからない場合は新規作成（年が変わった時など）
+                    console.log('📝 JSONファイルが見つかりません。新規作成します。');
+                    showMessage('新しい年のデータファイルを作成します', 'success');
                 }
-
+        
                 state.folderId = folderId;
                 console.log('✅ セットアップ完了');
             } catch (error) {
