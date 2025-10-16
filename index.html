@@ -20,7 +20,7 @@
         const SHARED_DRIVE_ID = '0AHJk3pS7tSEgUk9PVA';
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
-        const APP_VERSION = '2025/01/15 16:00';
+        const APP_VERSION = '2025/01/15 16:05';
 
         let gapiInited = false;
         let gisInited = false;
@@ -846,22 +846,28 @@
 
             let calendarHTML = '';
             const weekDays = ['日', '月', '火', '水', '木', '金', '土'];
-            weekDays.forEach(day => {
-                calendarHTML += `<div class="text-center font-bold text-gray-600 py-2">${day}</div>`;
+            weekDays.forEach((day, index) => {
+                const dayColor = index === 0 ? 'text-red-600' : (index === 6 ? 'text-blue-600' : 'text-gray-600');
+                calendarHTML += `<div class="text-center font-bold ${dayColor} py-2">${day}</div>`;
             });
-
+            
             for (let i = 0; i < startingDayOfWeek; i++) {
                 calendarHTML += '<div class="p-2"></div>';
             }
-
+            
             for (let day = 1; day <= daysInMonth; day++) {
                 const dateStr = formatDate(new Date(state.currentDate.getFullYear(), state.currentDate.getMonth(), day));
                 const dayPosts = state.posts[dateStr] || [];
                 const isToday = isCurrentMonth && day === today.getDate();
-
+                
+                // 曜日を計算（0=日曜, 6=土曜）
+                const currentDayOfWeek = new Date(state.currentDate.getFullYear(), state.currentDate.getMonth(), day).getDay();
+                const dayColor = currentDayOfWeek === 0 ? 'text-red-600' : (currentDayOfWeek === 6 ? 'text-blue-600' : 'text-gray-700');
+                const todayBorder = isToday ? 'border-blue-400 bg-blue-50' : 'border-gray-200';
+            
                 calendarHTML += `
-                    <div class="p-2 min-h-24 border rounded-lg transition-all bg-white border-gray-200 hover:border-blue-200">
-                        <div class="font-semibold mb-2 ${isToday ? 'text-blue-600' : 'text-gray-700'}">${day}${isToday ? '<span class="ml-1 text-xs">●</span>' : ''}</div>
+                    <div class="p-2 min-h-24 border rounded-lg transition-all bg-white ${todayBorder} hover:border-blue-200">
+                        <div class="font-semibold mb-2 ${dayColor}">${day}${isToday ? '<span class="ml-1 text-xs">●</span>' : ''}</div>
                         <div class="space-y-1">
                             ${dayPosts.map(post => {
                                 const platforms = post.platforms || [post.platform];
