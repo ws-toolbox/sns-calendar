@@ -20,7 +20,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/15 16:35';
+        const APP_VERSION = '2025/01/15 16:40';
 
         let gapiInited = false;
         let gisInited = false;
@@ -162,7 +162,7 @@
                 showMessage('スプレッドシートに書き込み中...', 'success');
         
                 // データを準備
-                const headers = [['投稿日', 'タイトル', '投稿先', '投稿テキスト', 'チェック完了者', '動画パス', '最終更新日時']];
+                const headers = [['投稿日', 'タイトル', '商品番号', '動画埋込', '投稿先', '投稿テキスト', 'リンク先', '備考', 'チェック完了者', '最終更新日時']];
                 const rows = [];
                 
                 Object.keys(state.posts).sort().forEach(date => {
@@ -172,21 +172,25 @@
                                 x: '𝕏',
                                 instagram: 'Instagram',
                                 line: 'LINE',
-                                stumaga: 'スタマガ'
+                                stumaga: 'スタマガ',
+                                youtube: 'YouTube'
                             };
                             return badges[p] || p;
                         }).join(', ');
                         
                         const checks = (post.checks || []).join(', ');
-                        const videoPaths = (post.videoPaths || []).map(v => v.path).filter(p => p).join(', ');
+                        const links = (post.links || []).join('\n');
                         
                         rows.push([
                             date,
                             post.title || '無題',
+                            post.productNumber || '',
+                            post.embedProduct ? 'はい' : '',
                             platforms,
                             post.text || '',
+                            links,
+                            post.remarks || '',
                             checks,
-                            videoPaths,
                             new Date().toLocaleString('ja-JP')
                         ]);
                     });
@@ -915,28 +919,23 @@
                 if (state.viewMode === 'view') {
                     const platforms = state.formData.platforms || [state.formData.platform];
                     editFormHTML = `<div class="bg-white rounded-2xl shadow-xl p-4">
-                        <div class="flex items-center justify-between mb-3">
-                            <h3 class="text-lg font-bold text-gray-800">投稿詳細</h3>
+                        <div class="flex items-center justify-end mb-3">
                             <button onclick="cancelEdit(); render();" class="p-1 hover:bg-gray-100 rounded-lg transition-colors">
                                 <span class="text-xl">×</span>
                             </button>
                         </div>
                         <div class="space-y-3">
-                            <div class="grid grid-cols-2 gap-3">
-                                <div>
-                                    <div class="font-semibold text-gray-800 text-sm">${state.selectedDate}</div>
-                                </div>
-                                <div>
-                                    <div class="flex gap-1 flex-wrap">
-                                        ${platforms.map(p => {
-                                            const badge = platformBadges[p];
-                                            return `<span class="${badge.color} text-white px-2 py-0.5 rounded text-xs">${badge.label}</span>`;
-                                        }).join('')}
-                                    </div>
+                            <div class="flex items-center gap-3">
+                                <div class="text-2xl font-bold text-gray-800">${state.selectedDate}</div>
+                                <div class="flex gap-1 flex-wrap">
+                                    ${platforms.map(p => {
+                                        const badge = platformBadges[p];
+                                        return `<span class="${badge.color} text-white px-2 py-1 rounded text-sm">${badge.label}</span>`;
+                                    }).join('')}
                                 </div>
                             </div>
                             <div>
-                                <div class="font-semibold text-gray-800 text-sm">${state.formData.title || '無題'}</div>
+                                <div class="font-semibold text-gray-800 text-lg">${state.formData.title || '無題'}</div>
                             </div>
                             ${state.formData.productNumber ? `
                                 <div>
@@ -949,9 +948,11 @@
                                         <button onclick="copyProductUrl('${state.formData.productNumber}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg transition-colors text-xs whitespace-nowrap">
                                             商品URLコピー
                                         </button>
-                                        <button onclick="findAndDownloadVideo('${state.formData.productNumber}')" class="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1.5 rounded-lg transition-colors text-xs whitespace-nowrap">
-                                            動画保存
-                                        </button>
+                                        ${state.formData.embedProduct ? `
+                                            <button onclick="findAndDownloadVideo('${state.formData.productNumber}')" class="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1.5 rounded-lg transition-colors text-xs whitespace-nowrap">
+                                                動画保存
+                                            </button>
+                                        ` : ''}
                                     </div>
                                 </div>
                             ` : ''}
