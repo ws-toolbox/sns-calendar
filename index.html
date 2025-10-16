@@ -453,9 +453,6 @@
         
                 state.lastUpdated = now;
                 showMessage('共有ドライブに保存しました！', 'success');
-                
-                // スプレッドシートにも自動更新
-                await updateSpreadsheetInBackground();
         
             } catch (error) {
                 console.error('保存エラー:', error);
@@ -1048,8 +1045,13 @@
             }
 
             document.getElementById('app').innerHTML = `
-                <div class="flex items-center gap-3">
-                    <h1 class="text-3xl font-bold text-gray-800">📱 SNS投稿カレンダー</h1>
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <h1 class="text-3xl font-bold text-gray-800">📱 SNS投稿カレンダー</h1>
+                        <button onclick="exportToSpreadsheet()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg transition-colors text-xs flex items-center gap-1">
+                            📊 スプレッドシート同期
+                        </button>
+                    </div>
                     <div class="flex flex-col items-end gap-1">
                         ${state.isSignedIn ? `
                             <div class="flex items-center gap-2">
