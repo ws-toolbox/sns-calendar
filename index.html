@@ -92,14 +92,6 @@
 
         async function initializeGapiClient() {
             await gapi.client.init({
-                discoveryDocs: [DISCOVERY_DOC]
-            });
-            gapiInited = true;
-            maybeEnableButtons();
-        }
-
-        async function initializeGapiClient() {
-            await gapi.client.init({
                 discoveryDocs: [
                     DISCOVERY_DOC,
                     'https://sheets.googleapis.com/$discovery/rest?version=v4'
@@ -245,34 +237,6 @@
             maybeEnableButtons();
         }
         
-        // 新しい関数を追加
-        async function ensureMediaFolderExists() {
-            if (!state.isSignedIn) return;
-        
-            try {
-                const folderResponse = await gapi.client.drive.files.list({
-                    q: `name='${VIDEO_MEDIA_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-                    spaces: 'drive',
-                    supportsAllDrives: true
-                });
-        
-                if (folderResponse.result.files && folderResponse.result.files.length > 0) {
-                    VIDEO_FOLDER_ID = folderResponse.result.files[0].id;
-                } else {
-                    const folderCreateResponse = await gapi.client.drive.files.create({
-                        resource: {
-                            name: VIDEO_MEDIA_FOLDER_NAME,
-                            mimeType: 'application/vnd.google-apps.folder'
-                        },
-                        fields: 'id'
-                    });
-                    VIDEO_FOLDER_ID = folderCreateResponse.result.id;
-                }
-            } catch (error) {
-                console.error('メディアフォルダ作成エラー:', error);
-            }
-        }
-
         function addVideoPath() {
             if (!state.formData.videoPaths) {
                 state.formData.videoPaths = [];
@@ -287,37 +251,6 @@
                 render();
             } else {
                 showMessage('動画パスは最大3つまで追加できます', 'error');
-            }
-        }
-        
-        // handleAuthClick関数の修正
-        function handleAuthClick() {
-            tokenClient.callback = async (resp) => {
-                if (resp.error !== undefined) {
-                    throw (resp);
-                }
-                accessToken = gapi.client.getToken().access_token;
-                state.isSignedIn = true;
-                localStorage.setItem('google_access_token', JSON.stringify(gapi.client.getToken()));
-                await ensureMediaFolderExists(); // フォルダ作成処理を追加
-                await loadFromDrive();
-                render();
-            };
-        
-            if (gapi.client.getToken() === null) {
-                tokenClient.requestAccessToken({prompt: 'consent'});
-            } else {
-                tokenClient.requestAccessToken({prompt: ''});
-            }
-        }
-        
-        // 関数追加の前に、これらの定数を追加
-        const VIDEO_MEDIA_FOLDER_NAME = 'SNS投稿メディア';
-        let VIDEO_FOLDER_ID = null;
-
-        function maybeEnableButtons() {
-            if (gapiInited && gisInited) {
-                tryAutoSignIn();
             }
         }
 
