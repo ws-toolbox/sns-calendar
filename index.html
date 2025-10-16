@@ -20,7 +20,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/15 17:00';
+        const APP_VERSION = '2025/01/15 17:05';
 
         let gapiInited = false;
         let gisInited = false;
@@ -922,13 +922,8 @@
 
                 if (state.viewMode === 'view') {
                     const platforms = state.formData.platforms || [state.formData.platform];
-                    editFormHTML = `<div class="bg-white rounded-2xl shadow-xl p-4 pt-2">
-                        <div class="flex items-center justify-end mb-2">
-                            <button onclick="cancelEdit(); render();" class="p-1 hover:bg-gray-100 rounded-lg transition-colors">
-                                <span class="text-xl">×</span>
-                            </button>
-                        </div>
-                        <div class="space-y-3">
+                    editFormHTML = `<div class="bg-white rounded-2xl shadow-xl p-4">
+                        <div class="flex items-center justify-between mb-3">
                             <div class="flex items-center gap-3">
                                 <div class="text-2xl font-bold text-gray-800">${state.selectedDate}</div>
                                 <div class="flex gap-1 flex-wrap">
@@ -938,6 +933,11 @@
                                     }).join('')}
                                 </div>
                             </div>
+                            <button onclick="cancelEdit(); render();" class="p-1 hover:bg-gray-100 rounded-lg transition-colors">
+                                <span class="text-xl">×</span>
+                            </button>
+                        </div>
+                        <div class="space-y-3">
                             <div>
                                 <div class="font-semibold text-gray-800 text-lg">${state.formData.title || '無題'}</div>
                             </div>
@@ -961,7 +961,10 @@
                                 </div>
                             ` : ''}
                             <div>
-                                <div class="bg-gray-50 p-2 rounded-lg rounded-b-none border border-gray-200 border-b-0 whitespace-pre-wrap text-sm max-h-32 overflow-y-auto">${state.formData.text || 'テキストなし'}</div>
+                                <div class="relative">
+                                    <div class="bg-gray-50 p-2 rounded-lg rounded-b-none border border-gray-200 border-b-0 whitespace-pre-wrap text-sm max-h-32 overflow-y-auto leading-relaxed" style="line-height: 1.6;">${state.formData.text || 'テキストなし'}</div>
+                                    <div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none rounded-b-lg"></div>
+                                </div>
                                 <button onclick="copyToClipboard(\`${state.formData.text}\`)" class="w-full flex items-center justify-center gap-2 bg-gray-200 text-gray-600 py-1.5 rounded-lg rounded-t-none hover:bg-gray-300 transition-colors text-xs border border-gray-200 border-t-0">
                                     📋 テキストをコピー
                                 </button>
