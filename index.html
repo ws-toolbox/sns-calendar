@@ -405,19 +405,19 @@
             }
         }
 
-      async function saveToDrive() {
+        async function saveToDrive() {
             if (!state.isSignedIn || !state.folderId || state.isSaving) return;
             
             state.isSaving = true;
             render();
-
+        
             try {
                 const now = new Date().toISOString();
                 const content = JSON.stringify({
                     posts: state.posts,
                     lastUpdated: now
                 });
-
+        
                 const file = new Blob([content], { type: 'application/json' });
                 const metadata = fileId ? {
                     name: FILE_NAME,
@@ -427,38 +427,91 @@
                     mimeType: 'application/json',
                     parents: [state.folderId]
                 };
-
+        
                 const form = new FormData();
                 form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
                 form.append('file', file);
-
+        
                 const url = fileId
                     ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&supportsAllDrives=true`
                     : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`;
-
+        
                 const response = await fetch(url, {
                     method: fileId ? 'PATCH' : 'POST',
                     headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
                     body: form
                 });
-
+        
                 if (!response.ok) {
                     throw new Error(`保存に失敗: ${response.status}`);
                 }
-
+        
                 const result = await response.json();
                 if (!fileId) {
                     fileId = result.id;
                 }
-
+        
                 state.lastUpdated = now;
                 showMessage('共有ドライブに保存しました！', 'success');
+                
+                // スプレッドシートにも自動更新
+                await updateSpreadsheetInBackground();
+        
             } catch (error) {
                 console.error('保存エラー:', error);
                 showMessage('保存に失敗: ' + error.message, 'error');
             } finally {
                 state.isSaving = false;
                 render();
+            }
+        }
+
+        async function updateSpreadsheetInBackground() {
+            try {
+                if (Object.keys(state.posts).length === 0) return;
+        
+                const headers = [['投稿日', 'タイトル', '投稿先', '投稿テキスト', 'チェック完了者', '動画パス', '最終更新日時']];
+                const rows = [];
+                
+                Object.keys(state.posts).sort().forEach(date => {
+                    state.posts[date].forEach(post => {
+                        const platforms = (post.platforms || [post.platform]).map(p => {
+                            const badges = { x: '𝕏', instagram: 'Instagram', line: 'LINE', stumaga: 'スタマガ' };
+                            return badges[p] || p;
+                        }).join(', ');
+                        
+                        const checks = (post.checks || []).join(', ');
+                        const videoPaths = (post.videoPaths || []).map(v => v.path).filter(p => p).join(', ');
+                        
+                        rows.push([
+                            date,
+                            post.title || '無題',
+                            platforms,
+                            post.text || '',
+                            checks,
+                            videoPaths,
+                            new Date().toLocaleString('ja-JP')
+                        ]);
+                    });
+                });
+        
+                await gapi.client.sheets.spreadsheets.values.clear({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: 'シート1!A1:Z'
+                });
+        
+                await gapi.client.sheets.spreadsheets.values.update({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: 'シート1!A1',
+                    valueInputOption: 'RAW',
+                    resource: { values: [...headers, ...rows] }
+                });
+        
+                console.log('✅ スプレッドシート自動更新完了');
+        
+            } catch (error) {
+                console.error('スプレッドシート自動更新エラー:', error);
+                // エラーが出てもユーザーには通知しない（バックグラウンド処理のため）
             }
         }
 
