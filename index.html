@@ -20,7 +20,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/15 16:45';
+        const APP_VERSION = '2025/01/15 16:50';
 
         let gapiInited = false;
         let gisInited = false;
@@ -589,10 +589,14 @@
                 state.posts[state.selectedDate] = datePosts.map(p => p.id === state.editingPostId ? newPost : p);
             } else {
                 state.posts[state.selectedDate] = [...datePosts, newPost];
+                // 新規投稿の場合、作成した投稿のIDを設定
+                state.editingPostId = newPost.id;
             }
          
             await saveToDrive();
-            cancelEdit();
+            
+            // 閲覧モードに切り替え
+            state.viewMode = 'view';
             render();
         }
         
