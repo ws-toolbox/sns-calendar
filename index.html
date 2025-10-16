@@ -909,7 +909,7 @@
                                         <div class="text-sm flex-1">
                                             <span class="font-semibold">商品番号:</span> 
                                             <a href="https://winds-score.com/products/${state.formData.productNumber}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">${state.formData.productNumber}</a>
-                                            ${state.formData.embedProduct ? '<span class="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">埋込</span>' : ''}
+                                            ${state.formData.embedProduct ? '<span class="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">動画埋込</span>' : ''}
                                         </div>
                                         <button onclick="copyProductUrl('${state.formData.productNumber}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg transition-colors text-xs whitespace-nowrap">
                                             商品URLコピー
@@ -1011,7 +1011,7 @@
                                     <input type="text" value="${state.formData.productNumber || ''}" onchange="state.formData.productNumber = this.value" placeholder="例: ABC-12345" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                                     <label class="flex items-center gap-1 text-sm whitespace-nowrap">
                                         <input type="checkbox" ${state.formData.embedProduct ? 'checked' : ''} onchange="state.formData.embedProduct = this.checked" class="rounded">
-                                        埋込
+                                        動画埋込
                                     </label>
                                 </div>
                             </div>
