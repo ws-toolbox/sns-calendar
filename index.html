@@ -13,12 +13,13 @@
 
     <script>
         const CLIENT_ID = '417822818519-8imosvo7c9e2gem7cp0rse0vm8vrjlou.apps.googleusercontent.com';
-        const SCOPES = 'https://www.googleapis.com/auth/drive';
+        const SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets';
         const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
         const FILE_NAME = getCurrentYearFileName();
         const FOLDER_NAME = 'SNS投稿管理';
         const SHARED_DRIVE_ID = '0AHJk3pS7tSEgUk9PVA';
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
+        const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const APP_VERSION = '2025/01/15 15:35';
 
         let gapiInited = false;
@@ -57,6 +58,17 @@
             maybeEnableButtons();
         }
 
+        async function initializeGapiClient() {
+            await gapi.client.init({
+                discoveryDocs: [
+                    DISCOVERY_DOC,
+                    'https://sheets.googleapis.com/$discovery/rest?version=v4'
+                ]
+            });
+            gapiInited = true;
+            maybeEnableButtons();
+        }
+
         async function uploadMediaToDrive(file) {
             if (!state.isSignedIn) return null;
         
@@ -86,6 +98,100 @@
                 console.error('メディアアップロードエラー:', error);
                 showMessage('メディアのアップロードに失敗', 'error');
                 return null;
+            }
+        }
+
+        async function exportToSpreadsheet() {
+            if (!state.isSignedIn) {
+                showMessage('先にGoogle Driveに接続してください', 'error');
+                return;
+            }
+        
+            if (Object.keys(state.posts).length === 0) {
+                showMessage('エクスポートするデータがありません', 'error');
+                return;
+            }
+        
+            try {
+                showMessage('スプレッドシートに書き込み中...', 'success');
+        
+                // データを準備
+                const headers = [['投稿日', 'タイトル', '投稿先', '投稿テキスト', 'チェック完了者', '動画パス', '最終更新日時']];
+                const rows = [];
+                
+                Object.keys(state.posts).sort().forEach(date => {
+                    state.posts[date].forEach(post => {
+                        const platforms = (post.platforms || [post.platform]).map(p => {
+                            const badges = {
+                                x: '𝕏',
+                                instagram: 'Instagram',
+                                line: 'LINE',
+                                stumaga: 'スタマガ'
+                            };
+                            return badges[p] || p;
+                        }).join(', ');
+                        
+                        const checks = (post.checks || []).join(', ');
+                        const videoPaths = (post.videoPaths || []).map(v => v.path).filter(p => p).join(', ');
+                        
+                        rows.push([
+                            date,
+                            post.title || '無題',
+                            platforms,
+                            post.text || '',
+                            checks,
+                            videoPaths,
+                            new Date().toLocaleString('ja-JP')
+                        ]);
+                    });
+                });
+        
+                // シートをクリアしてデータを書き込み
+                await gapi.client.sheets.spreadsheets.values.clear({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: 'シート1!A1:Z'
+                });
+        
+                await gapi.client.sheets.spreadsheets.values.update({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: 'シート1!A1',
+                    valueInputOption: 'RAW',
+                    resource: {
+                        values: [...headers, ...rows]
+                    }
+                });
+        
+                // ヘッダー行を太字にフォーマット
+                await gapi.client.sheets.spreadsheets.batchUpdate({
+                    spreadsheetId: SPREADSHEET_ID,
+                    resource: {
+                        requests: [{
+                            repeatCell: {
+                                range: {
+                                    sheetId: 0,
+                                    startRowIndex: 0,
+                                    endRowIndex: 1
+                                },
+                                cell: {
+                                    userEnteredFormat: {
+                                        textFormat: {
+                                            bold: true
+                                        }
+                                    }
+                                },
+                                fields: 'userEnteredFormat.textFormat.bold'
+                            }
+                        }]
+                    }
+                });
+        
+                // スプレッドシートを開く
+                window.open(`https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}`, '_blank');
+                showMessage('スプレッドシートに書き込みました！', 'success');
+        
+            } catch (error) {
+                console.error('スプレッドシート書き込みエラー:', error);
+                showMessage('スプレッドシートへの書き込みに失敗しました: ' + (error.result?.error?.message || error.message), 'error');
             }
         }
 
