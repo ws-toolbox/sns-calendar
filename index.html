@@ -20,7 +20,7 @@
         const SHARED_DRIVE_ID = '0AHJk3pS7tSEgUk9PVA';
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
-        const APP_VERSION = '2025/01/15 15:55';
+        const APP_VERSION = '2025/01/15 16:00';
 
         let gapiInited = false;
         let gisInited = false;
@@ -558,13 +558,12 @@
                     data: file.data,
                     uploadDate: new Date().toISOString()
                 })),
-                videoPaths: state.formData.videoPaths ? state.formData.videoPaths.filter(path => path.path.trim() !== '').map(path => ({
-                    name: path.name,
-                    path: path.path.trim(),
-                    uploadDate: new Date().toISOString()
-                })) : [],
                 checks: state.formData.checks || [],
-                completedChecks: state.formData.completedChecks || []
+                completedChecks: state.formData.completedChecks || [],
+                productNumber: state.formData.productNumber || '',
+                embedProduct: state.formData.embedProduct || false,
+                remarks: state.formData.remarks || '',
+                links: state.formData.links || []
             };
          
             const datePosts = state.posts[state.selectedDate] || [];
@@ -661,11 +660,6 @@
                     text: '', 
                     images: [], 
                     checks: [],
-                    videoPaths: [{
-                        name: '動画 1',
-                        path: '',
-                        uploadDate: new Date().toISOString()
-                    }],
                     productNumber: '',
                     embedProduct: false,
                     remarks: '',
@@ -927,14 +921,15 @@
                             ${state.formData.productNumber ? `
                                 <div>
                                     <div class="text-sm">
-                                        <span class="font-semibold">商品番号:</span> ${state.formData.productNumber}
+                                        <span class="font-semibold">商品番号:</span> 
+                                        <a href="https://winds-score.com/products/${state.formData.productNumber}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">${state.formData.productNumber}</a>
                                         ${state.formData.embedProduct ? '<span class="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">埋込</span>' : ''}
                                     </div>
                                 </div>
                             ` : ''}
                             <div>
-                                <div class="bg-gray-50 p-2 rounded-lg border border-gray-200 whitespace-pre-wrap text-sm max-h-32 overflow-y-auto">${state.formData.text || 'テキストなし'}</div>
-                                <button onclick="copyToClipboard(\`${state.formData.text}\`)" class="mt-1 w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-500 py-1.5 rounded-lg hover:bg-gray-200 transition-colors text-xs">
+                                <div class="bg-gray-50 p-2 rounded-lg rounded-b-none border border-gray-200 border-b-0 whitespace-pre-wrap text-sm max-h-32 overflow-y-auto">${state.formData.text || 'テキストなし'}</div>
+                                <button onclick="copyToClipboard(\`${state.formData.text}\`)" class="w-full flex items-center justify-center gap-2 bg-gray-200 text-gray-600 py-1.5 rounded-lg rounded-t-none hover:bg-gray-300 transition-colors text-xs border border-gray-200 border-t-0">
                                     📋 テキストをコピー
                                 </button>
                             </div>
@@ -942,8 +937,11 @@
                                 <div>
                                     <div class="space-y-1">
                                         ${state.formData.links.map((link, index) => `
-                                            <div class="bg-blue-50 p-2 rounded-lg border border-blue-200">
-                                                <a href="${link}" target="_blank" class="text-blue-600 hover:text-blue-800 text-xs break-all">🔗 ${link}</a>
+                                            <div class="bg-blue-50 p-2 rounded-lg border border-blue-200 flex items-center gap-2">
+                                                <a href="${link}" target="_blank" class="text-blue-600 hover:text-blue-800 text-xs break-all flex-1">🔗 ${link}</a>
+                                                <button onclick="copyToClipboard(\`${link}\`)" class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs whitespace-nowrap">
+                                                    コピー
+                                                </button>
                                             </div>
                                         `).join('')}
                                     </div>
@@ -991,18 +989,6 @@
                                     </div>
                                 ` : '<div class="text-xs text-gray-400">まだチェック完了者はいません</div>'}
                             </div>
-                            ${state.formData.videoPaths && state.formData.videoPaths.length > 0 ? `
-                                <div>
-                                    <div class="space-y-1 max-h-24 overflow-y-auto">
-                                        ${state.formData.videoPaths.map((videoPath, index) => `
-                                            <div class="bg-gray-100 p-1.5 rounded-lg">
-                                                <div class="text-xs font-semibold">${videoPath.name}</div>
-                                                <div class="text-xs text-gray-600 truncate">${videoPath.path || 'パスが設定されていません'}</div>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                </div>
-                            ` : ''}
                             <div class="flex gap-2 pt-3 border-t">
                                 <button onclick="switchToEditMode()" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm">
                                     ✏️ 編集
@@ -1038,15 +1024,15 @@
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-gray-700 mb-1">投稿先SNS（複数選択可）</label>
-                                <div class="grid grid-cols-2 gap-2">
+                                <div class="flex gap-2 flex-wrap">
                                     ${[
                                         {value: 'x', label: '𝕏', color: 'bg-black'},
-                                        {value: 'instagram', label: 'Instagram', color: 'bg-gradient-to-r from-purple-500 to-pink-500'},
+                                        {value: 'instagram', label: 'IG', color: 'bg-gradient-to-r from-purple-500 to-pink-500'},
                                         {value: 'line', label: 'LINE', color: 'bg-green-500'},
                                         {value: 'stumaga', label: 'スタマガ', color: 'bg-orange-500'},
-                                        {value: 'youtube', label: 'YouTube', color: 'bg-red-600'}
+                                        {value: 'youtube', label: 'YT', color: 'bg-red-600'}
                                     ].map(platform => `
-                                        <button onclick="togglePlatform('${platform.value}')" class="py-1.5 px-2 rounded-lg font-semibold text-white transition-all text-xs ${state.formData.platforms.includes(platform.value) ? `${platform.color} ring-2 ring-offset-2 ring-blue-300` : 'bg-gray-300 hover:bg-gray-400'}">
+                                        <button onclick="togglePlatform('${platform.value}')" class="py-1.5 px-3 rounded-lg font-semibold text-white transition-all text-xs ${state.formData.platforms.includes(platform.value) ? `${platform.color} ring-2 ring-offset-2 ring-blue-300` : 'bg-gray-300 hover:bg-gray-400'}">
                                             ${platform.label}
                                         </button>
                                     `).join('')}
@@ -1117,23 +1103,6 @@
                                         </div>
                                     `}
                                 </div>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-gray-700 mb-1">動画パス（最大3つ）</label>
-                                ${state.formData.videoPaths && state.formData.videoPaths.length > 0 ? state.formData.videoPaths.map((videoPath, index) => `
-                                    <div class="mb-2">
-                                        <input 
-                                            type="text" 
-                                            value="${videoPath.path}" 
-                                            onchange="state.formData.videoPaths[${index}].path = this.value" 
-                                            placeholder="動画のファイルパスまたはURL" 
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                                        >
-                                    </div>
-                                `).join('') : ''}
-                                <button onclick="addVideoPath()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition-colors text-xs">
-                                    動画パスを追加
-                                </button>
                             </div>
                             <div class="flex gap-2 pt-2">
                                 <button onclick="savePost()" ${state.isSaving ? 'disabled' : ''} class="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-semibold transition-colors text-sm ${state.isSaving ? 'opacity-50 cursor-not-allowed' : ''}">
