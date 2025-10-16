@@ -20,7 +20,8 @@
         const SHARED_DRIVE_ID = '0AHJk3pS7tSEgUk9PVA';
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
-        const APP_VERSION = '2025/01/15 16:05';
+        const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
+        const APP_VERSION = '2025/01/15 16:10';
 
         let gapiInited = false;
         let gisInited = false;
@@ -40,6 +41,45 @@
             lastUpdated: null,
             formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: []}
         };
+
+        async function findAndDownloadVideo(productNumber) {
+            if (!state.isSignedIn || !productNumber) {
+                showMessage('商品番号が入力されていません', 'error');
+                return;
+            }
+        
+            try {
+                showMessage('動画を検索中...', 'success');
+        
+                // 動画ファイルを検索
+                const response = await gapi.client.drive.files.list({
+                    q: `name='${productNumber}.mp4' and '${VIDEO_FOLDER_ID}' in parents and trashed=false`,
+                    fields: 'files(id, name, webContentLink)',
+                    spaces: 'drive',
+                    supportsAllDrives: true,
+                    includeItemsFromAllDrives: true
+                });
+        
+                if (response.result.files && response.result.files.length > 0) {
+                    const fileId = response.result.files[0].id;
+                    const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+                    
+                    // ダウンロードを開始
+                    window.open(downloadUrl, '_blank');
+                    showMessage('動画のダウンロードを開始しました', 'success');
+                } else {
+                    showMessage(`動画ファイル「${productNumber}.mp4」が見つかりませんでした`, 'error');
+                }
+            } catch (error) {
+                console.error('動画検索エラー:', error);
+                showMessage('動画の検索に失敗しました', 'error');
+            }
+        }
+        
+        function copyProductUrl(productNumber) {
+            const url = `https://winds-score.com/products/${productNumber}`;
+            copyToClipboard(url);
+        }
 
         function getCurrentYearFileName() {
             const currentYear = new Date().getFullYear();
@@ -926,10 +966,18 @@
                             </div>
                             ${state.formData.productNumber ? `
                                 <div>
-                                    <div class="text-sm">
-                                        <span class="font-semibold">商品番号:</span> 
-                                        <a href="https://winds-score.com/products/${state.formData.productNumber}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">${state.formData.productNumber}</a>
-                                        ${state.formData.embedProduct ? '<span class="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">埋込</span>' : ''}
+                                    <div class="flex items-center gap-2">
+                                        <div class="text-sm flex-1">
+                                            <span class="font-semibold">商品番号:</span> 
+                                            <a href="https://winds-score.com/products/${state.formData.productNumber}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">${state.formData.productNumber}</a>
+                                            ${state.formData.embedProduct ? '<span class="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">埋込</span>' : ''}
+                                        </div>
+                                        <button onclick="copyProductUrl('${state.formData.productNumber}')" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg transition-colors text-xs whitespace-nowrap">
+                                            商品URLコピー
+                                        </button>
+                                        <button onclick="findAndDownloadVideo('${state.formData.productNumber}')" class="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1.5 rounded-lg transition-colors text-xs whitespace-nowrap">
+                                            動画保存
+                                        </button>
                                     </div>
                                 </div>
                             ` : ''}
