@@ -15,13 +15,12 @@
         const CLIENT_ID = '417822818519-8imosvo7c9e2gem7cp0rse0vm8vrjlou.apps.googleusercontent.com';
         const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets';
         const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
-        const FILE_NAME = getCurrentYearFileName();
         const FOLDER_NAME = 'SNS投稿管理';
         const SHARED_DRIVE_ID = '0AHJk3pS7tSEgUk9PVA';
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/15 16:20';
+        const APP_VERSION = '2025/01/15 16:25';
 
         let gapiInited = false;
         let gisInited = false;
@@ -342,8 +341,27 @@
                     return;
                 }
         
+                state.folderId = folderId;
+                
+                // 現在表示中の年のデータを読み込む
+                await loadYearData();
+                
+                console.log('✅ セットアップ完了');
+            } catch (error) {
+                console.error('❌ 共有ドライブ読み込みエラー:', error);
+                showMessage('エラー: ' + (error.result?.error?.message || error.message), 'error');
+            }
+        }
+        
+        async function loadYearData() {
+            if (!state.folderId) return;
+            
+            const currentYear = state.currentDate.getFullYear();
+            const fileName = `sns_calendar_data_${currentYear}.json`;
+            
+            try {
                 const response = await gapi.client.drive.files.list({
-                    q: `name='${FILE_NAME}' and '${folderId}' in parents and trashed=false`,
+                    q: `name='${fileName}' and '${state.folderId}' in parents and trashed=false`,
                     fields: 'files(id, name)',
                     spaces: 'drive',
                     supportsAllDrives: true,
@@ -363,23 +381,25 @@
                         const data = JSON.parse(fileContent.body);
                         state.posts = data.posts || {};
                         state.lastUpdated = data.lastUpdated || null;
-                        console.log('✅ 共有ドライブからデータ読み込み成功');
-                        showMessage('共有ドライブからデータを読み込みました', 'success');
+                        console.log(`✅ ${currentYear}年のデータ読み込み成功`);
+                        showMessage(`${currentYear}年のデータを読み込みました`, 'success');
                     }
                 } else {
-                    // JSONファイルが見つからない場合は新規作成（年が変わった時など）
-                    console.log('📝 JSONファイルが見つかりません。新規作成します。');
-                    showMessage('新しい年のデータファイルを作成します', 'success');
+                    // JSONファイルが見つからない場合は空のデータで開始
+                    console.log(`📝 ${currentYear}年のJSONファイルが見つかりません。`);
+                    state.posts = {};
+                    state.lastUpdated = null;
+                    fileId = null;
+                    showMessage(`${currentYear}年の新規データを作成します`, 'success');
                 }
-        
-                state.folderId = folderId;
-                console.log('✅ セットアップ完了');
             } catch (error) {
-                console.error('❌ 共有ドライブ読み込みエラー:', error);
-                showMessage('エラー: ' + (error.result?.error?.message || error.message), 'error');
+                console.error('年データ読み込みエラー:', error);
+                state.posts = {};
+                state.lastUpdated = null;
+                fileId = null;
             }
         }
-
+        
         async function saveToDrive() {
             if (!state.isSignedIn || !state.folderId || state.isSaving) return;
             
@@ -387,6 +407,9 @@
             render();
         
             try {
+                const currentYear = state.currentDate.getFullYear();
+                const fileName = `sns_calendar_data_${currentYear}.json`;
+                
                 const now = new Date().toISOString();
                 const content = JSON.stringify({
                     posts: state.posts,
@@ -395,10 +418,10 @@
         
                 const file = new Blob([content], { type: 'application/json' });
                 const metadata = fileId ? {
-                    name: FILE_NAME,
+                    name: fileName,
                     mimeType: 'application/json'
                 } : {
-                    name: FILE_NAME,
+                    name: fileName,
                     mimeType: 'application/json',
                     parents: [state.folderId]
                 };
