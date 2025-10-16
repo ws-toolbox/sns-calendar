@@ -20,7 +20,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/15 16:30';
+        const APP_VERSION = '2025/01/15 16:35';
 
         let gapiInited = false;
         let gisInited = false;
@@ -38,6 +38,7 @@
             isSaving: false,
             folderId: null,
             lastUpdated: null,
+            currentYear: new Date().getFullYear(), // 追加
             formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: []}
         };
 
@@ -73,6 +74,20 @@
                 console.error('動画検索エラー:', error);
                 showMessage('動画の検索に失敗しました', 'error');
             }
+        }
+
+        async function changeMonth(offset) {
+            const oldYear = state.currentDate.getFullYear();
+            state.currentDate.setMonth(state.currentDate.getMonth() + offset);
+            const newYear = state.currentDate.getFullYear();
+            
+            // 年が変わった場合のみ再読み込み
+            if (oldYear !== newYear && state.currentYear !== newYear) {
+                state.currentYear = newYear;
+                await loadYearData();
+            }
+            
+            render();
         }
         
         function copyProductUrl(productNumber) {
@@ -342,6 +357,7 @@
                 }
         
                 state.folderId = folderId;
+                state.currentYear = state.currentDate.getFullYear(); // この行を追加
                 
                 // 現在表示中の年のデータを読み込む
                 await loadYearData();
@@ -1158,7 +1174,7 @@
                     <div class="lg:col-span-2">
                         <div class="bg-white rounded-2xl shadow-xl p-6">
                             <div class="flex items-center justify-between mb-6">
-                                <button onclick="state.currentDate.setMonth(state.currentDate.getMonth() - 1); loadYearData().then(() => render());" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                                <button onclick="changeMonth(-1)" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                                     ◀
                                 </button>
                                 <div class="flex items-center gap-3">
@@ -1167,7 +1183,7 @@
                                         本日
                                     </button>
                                 </div>
-                                <button onclick="state.currentDate.setMonth(state.currentDate.getMonth() + 1); loadYearData().then(() => render());" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                                <button onclick="changeMonth(1)" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                                     ▶
                                 </button>
                             </div>
