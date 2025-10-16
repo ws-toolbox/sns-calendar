@@ -20,7 +20,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/15 16:55';
+        const APP_VERSION = '2025/01/15 17:00';
 
         let gapiInited = false;
         let gisInited = false;
@@ -922,8 +922,8 @@
 
                 if (state.viewMode === 'view') {
                     const platforms = state.formData.platforms || [state.formData.platform];
-                    editFormHTML = `<div class="bg-white rounded-2xl shadow-xl p-4">
-                        <div class="flex items-center justify-end mb-1">
+                    editFormHTML = `<div class="bg-white rounded-2xl shadow-xl p-4 pt-2">
+                        <div class="flex items-center justify-end mb-2">
                             <button onclick="cancelEdit(); render();" class="p-1 hover:bg-gray-100 rounded-lg transition-colors">
                                 <span class="text-xl">×</span>
                             </button>
