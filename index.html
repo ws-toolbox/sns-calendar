@@ -1050,13 +1050,6 @@
             document.getElementById('app').innerHTML = `
                 <div class="flex items-center gap-3">
                     <h1 class="text-3xl font-bold text-gray-800">📱 SNS投稿カレンダー</h1>
-                    <button onclick="exportToCSV()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg transition-colors text-xs flex items-center gap-1">
-                        📥 CSV出力
-                    </button>
-                    <button onclick="exportToSpreadsheet()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg transition-colors text-xs flex items-center gap-1">
-                        📊 スプレッドシート
-                    </button>
-                </div>
                     <div class="flex flex-col items-end gap-1">
                         ${state.isSignedIn ? `
                             <div class="flex items-center gap-2">
