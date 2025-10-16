@@ -20,7 +20,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/15 16:40';
+        const APP_VERSION = '2025/01/15 16:45';
 
         let gapiInited = false;
         let gisInited = false;
@@ -919,7 +919,7 @@
                 if (state.viewMode === 'view') {
                     const platforms = state.formData.platforms || [state.formData.platform];
                     editFormHTML = `<div class="bg-white rounded-2xl shadow-xl p-4">
-                        <div class="flex items-center justify-end mb-3">
+                        <div class="flex items-center justify-end mb-1">
                             <button onclick="cancelEdit(); render();" class="p-1 hover:bg-gray-100 rounded-lg transition-colors">
                                 <span class="text-xl">×</span>
                             </button>
@@ -1029,7 +1029,7 @@
                         </div>
                     </div>`;
                 } else {
-                    editFormHTML = `<div class="bg-white rounded-2xl shadow-xl p-4">
+                    editFormHTML = `<div class="bg-blue-50 rounded-2xl shadow-xl p-4">
                         <div class="flex items-center justify-between mb-3">
                             <h3 class="text-lg font-bold text-gray-800">${state.editingPostId ? '投稿を編集' : '新規投稿'} - ${state.selectedDate}</h3>
                             <button onclick="cancelEdit(); render();" class="p-1 hover:bg-gray-100 rounded-lg transition-colors">
