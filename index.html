@@ -20,7 +20,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/15 17:15';
+        const APP_VERSION = '2025/01/15 17:20';
 
         let gapiInited = false;
         let gisInited = false;
@@ -419,6 +419,52 @@
                 fileId = null;
             }
         }
+
+        async function checkForUpdates() {
+            try {
+                const currentYear = state.currentDate.getFullYear();
+                const fileName = `sns_calendar_data_${currentYear}.json`;
+                
+                const response = await gapi.client.drive.files.list({
+                    q: `name='${fileName}' and '${state.folderId}' in parents and trashed=false`,
+                    fields: 'files(id, modifiedTime)',
+                    spaces: 'drive',
+                    supportsAllDrives: true,
+                    includeItemsFromAllDrives: true
+                });
+        
+                if (response.result.files && response.result.files.length > 0) {
+                    const serverModifiedTime = new Date(response.result.files[0].modifiedTime);
+                    const localModifiedTime = state.lastUpdated ? new Date(state.lastUpdated) : new Date(0);
+                    
+                    if (serverModifiedTime > localModifiedTime) {
+                        if (confirm('他のユーザーがデータを更新しました。最新データを読み込みますか？\n\n※編集中の場合、編集内容は保持されます。')) {
+                            const currentFormData = state.selectedDate ? {...state.formData} : null;
+                            const currentEditingPostId = state.editingPostId;
+                            const currentViewMode = state.viewMode;
+                            const currentSelectedDate = state.selectedDate;
+                            
+                            await loadYearData();
+                            
+                            // 編集中だった場合、フォームデータを復元
+                            if (currentSelectedDate) {
+                                state.selectedDate = currentSelectedDate;
+                                state.editingPostId = currentEditingPostId;
+                                state.viewMode = currentViewMode;
+                                if (currentFormData) {
+                                    state.formData = currentFormData;
+                                }
+                            }
+                            
+                            render();
+                            showMessage('最新データを読み込みました', 'success');
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('更新チェックエラー:', error);
+            }
+        }
         
         async function saveToDrive() {
             if (!state.isSignedIn || !state.folderId || state.isSaving) return;
@@ -427,6 +473,41 @@
             render();
         
             try {
+                // 保存前に競合チェック
+                if (fileId) {
+                    const checkResponse = await gapi.client.drive.files.get({
+                        fileId: fileId,
+                        fields: 'modifiedTime',
+                        supportsAllDrives: true
+                    });
+                    
+                    const serverModifiedTime = new Date(checkResponse.result.modifiedTime);
+                    const localModifiedTime = state.lastUpdated ? new Date(state.lastUpdated) : new Date(0);
+                    
+                    if (serverModifiedTime > localModifiedTime) {
+                        state.isSaving = false;
+                        render();
+                        
+                        if (confirm('⚠️ 他のユーザーがデータを更新しています。\n\n最新データを読み込んでから再度保存してください。\n今すぐ読み込みますか？\n\n※編集中の内容は保持されます。')) {
+                            const currentFormData = {...state.formData};
+                            const currentEditingPostId = state.editingPostId;
+                            const currentViewMode = state.viewMode;
+                            const currentSelectedDate = state.selectedDate;
+                            
+                            await loadYearData();
+                            
+                            state.selectedDate = currentSelectedDate;
+                            state.editingPostId = currentEditingPostId;
+                            state.viewMode = currentViewMode;
+                            state.formData = currentFormData;
+                            
+                            render();
+                            showMessage('最新データを読み込みました。もう一度保存してください。', 'error');
+                        }
+                        return;
+                    }
+                }
+        
                 const currentYear = state.currentDate.getFullYear();
                 const fileName = `sns_calendar_data_${currentYear}.json`;
                 
@@ -1222,6 +1303,13 @@
         window.addEventListener('load', () => {
             gapiLoaded();
             gisLoaded();
+            
+            // 3分ごとに更新をチェック
+            setInterval(async () => {
+                if (state.isSignedIn && !state.isSaving) {
+                    await checkForUpdates();
+                }
+            }, 180000); // 180000ms = 3分
         });
     </script>
 </body>
