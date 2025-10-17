@@ -20,7 +20,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/15 17:35';
+        const APP_VERSION = '2025/01/15 17:40';
 
         let gapiInited = false;
         let gisInited = false;
@@ -489,25 +489,26 @@
                     
                     // 1秒以上の差がある場合のみ競合とみなす（自分の保存との誤判定を防ぐ）
                     if (serverModifiedTime.getTime() - localModifiedTime.getTime() > 1000) {
-                        state.isSaving = false;
-                        render();
+                        // 編集中の内容を保持
+                        const currentFormData = {...state.formData};
+                        const currentEditingPostId = state.editingPostId;
+                        const currentViewMode = state.viewMode;
+                        const currentSelectedDate = state.selectedDate;
                         
-                        if (confirm('⚠️ 他のユーザーがデータを更新しています。\n\n最新データを読み込んでから再度保存してください。\n今すぐ読み込みますか？\n\n※編集中の内容は保持されます。')) {
-                            const currentFormData = {...state.formData};
-                            const currentEditingPostId = state.editingPostId;
-                            const currentViewMode = state.viewMode;
-                            const currentSelectedDate = state.selectedDate;
-                            
-                            await loadYearData();
-                            
-                            state.selectedDate = currentSelectedDate;
-                            state.editingPostId = currentEditingPostId;
-                            state.viewMode = currentViewMode;
-                            state.formData = currentFormData;
-                            
-                            render();
-                            showMessage('最新データを読み込みました。もう一度保存してください。', 'error');
-                        }
+                        // 最新データを自動で読み込む
+                        await loadYearData();
+                        
+                        // 画面を復元
+                        state.selectedDate = currentSelectedDate;
+                        state.editingPostId = currentEditingPostId;
+                        state.viewMode = currentViewMode;
+                        state.formData = currentFormData;
+                        
+                        showMessage('最新データを読み込みました。保存を続行します...', 'success');
+                        
+                        // 読み込んだ最新データに対して保存を実行（再帰的に実行）
+                        state.isSaving = false;
+                        await saveToDrive();
                         return;
                     }
                 }
@@ -554,7 +555,14 @@
                     fileId = result.id;
                 }
         
-                state.lastUpdated = now;
+                // 保存後にDriveのmodifiedTimeを再取得して同期
+                const updatedFile = await gapi.client.drive.files.get({
+                    fileId: fileId,
+                    fields: 'modifiedTime',
+                    supportsAllDrives: true
+                });
+                state.lastUpdated = updatedFile.result.modifiedTime;
+                
                 showMessage('共有ドライブに保存しました！', 'success');
         
             } catch (error) {
