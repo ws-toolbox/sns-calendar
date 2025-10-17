@@ -437,9 +437,9 @@
                     const serverModifiedTime = new Date(response.result.files[0].modifiedTime);
                     const localModifiedTime = state.lastUpdated ? new Date(state.lastUpdated) : new Date(0);
                     
-                        // 修正後
-                        // 1秒以上の差がある場合のみ競合とみなす（自分の保存との誤判定を防ぐ）
-                        if (serverModifiedTime.getTime() - localModifiedTime.getTime() > 1000) {
+                    // 1秒以上の差がある場合のみ競合とみなす（自分の保存との誤判定を防ぐ）
+                    if (serverModifiedTime.getTime() - localModifiedTime.getTime() > 1000) {
+                        if (confirm('他のユーザーがデータを更新しました。最新データを読み込みますか？\n\n※編集中の場合、編集内容は保持されます。')) {
                             const currentFormData = state.selectedDate ? {...state.formData} : null;
                             const currentEditingPostId = state.editingPostId;
                             const currentViewMode = state.viewMode;
