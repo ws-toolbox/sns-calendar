@@ -20,7 +20,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/15 17:30';
+        const APP_VERSION = '2025/01/15 17:35';
 
         let gapiInited = false;
         let gisInited = false;
@@ -382,7 +382,7 @@
             try {
                 const response = await gapi.client.drive.files.list({
                     q: `name='${fileName}' and '${state.folderId}' in parents and trashed=false`,
-                    fields: 'files(id, name)',
+                    fields: 'files(id, name, modifiedTime)',
                     spaces: 'drive',
                     supportsAllDrives: true,
                     includeItemsFromAllDrives: true
@@ -391,6 +391,8 @@
                 const files = response.result.files;
                 if (files && files.length > 0) {
                     fileId = files[0].id;
+                    const serverModifiedTime = files[0].modifiedTime; // Driveのタイムスタンプを保存
+                    
                     const fileContent = await gapi.client.drive.files.get({
                         fileId: fileId,
                         alt: 'media',
@@ -400,7 +402,7 @@
                     if (fileContent.body) {
                         const data = JSON.parse(fileContent.body);
                         state.posts = data.posts || {};
-                        state.lastUpdated = data.lastUpdated || null;
+                        state.lastUpdated = serverModifiedTime; // modifiedTimeを使用
                         console.log(`✅ ${currentYear}年のデータ読み込み成功`);
                         showMessage(`${currentYear}年のデータを読み込みました`, 'success');
                     }
