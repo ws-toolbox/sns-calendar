@@ -20,7 +20,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/15 17:25';
+        const APP_VERSION = '2025/01/15 17:30';
 
         let gapiInited = false;
         let gisInited = false;
@@ -485,7 +485,8 @@
                     const serverModifiedTime = new Date(checkResponse.result.modifiedTime);
                     const localModifiedTime = state.lastUpdated ? new Date(state.lastUpdated) : new Date(0);
                     
-                    if (serverModifiedTime > localModifiedTime) {
+                    // 1秒以上の差がある場合のみ競合とみなす（自分の保存との誤判定を防ぐ）
+                    if (serverModifiedTime.getTime() - localModifiedTime.getTime() > 1000) {
                         state.isSaving = false;
                         render();
                         
