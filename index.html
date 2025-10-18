@@ -21,7 +21,7 @@
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
         const ACTIVE_USERS_FILE = 'active_users.json';
-        const APP_VERSION = '2025/01/15 17:25';
+        const APP_VERSION = '2025/01/15 17:30';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1443,13 +1443,17 @@
                     <div class="flex flex-col items-end gap-1">
                         ${state.isSignedIn ? `
                             <div class="flex items-center gap-2">
-                                <div class="flex items-center gap-2">
-                                    ${state.userName ? `<div class="text-xs text-gray-600">ログイン中: ${state.userName}</div>` : ''}
+                                <div class="flex flex-col items-end gap-0.5">
+                                    ${state.userName ? `<div class="text-xs text-gray-600">ログイン中: <span class="font-semibold">${state.userName}</span></div>` : ''}
                                     ${state.activeUsers.length > 0 ? `
                                         <div class="text-xs text-blue-600">
-                                            他の接続中: ${state.activeUsers.join(', ')}
+                                            👥 他の接続中 (${state.activeUsers.length}人): ${state.activeUsers.join(', ')}
                                         </div>
-                                    ` : ''}
+                                    ` : `
+                                        <div class="text-xs text-gray-400">
+                                            他に接続中のユーザーはいません
+                                        </div>
+                                    `}
                                 </div>
                                 <div class="inline-flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1 rounded-lg text-xs">
                                     ✅ 共有ドライブ接続済
