@@ -679,7 +679,17 @@
          
             const datePosts = state.posts[state.selectedDate] || [];
             if (state.editingPostId) {
-                state.posts[state.selectedDate] = datePosts.map(p => p.id === state.editingPostId ? newPost : p);
+                // 編集中の投稿が存在するか確認
+                const existingPostIndex = datePosts.findIndex(p => p.id === state.editingPostId);
+                
+                if (existingPostIndex !== -1) {
+                    // 投稿が存在する場合は更新
+                    state.posts[state.selectedDate] = datePosts.map(p => p.id === state.editingPostId ? newPost : p);
+                } else {
+                    // 投稿が存在しない（他ユーザーが削除した）場合は新規投稿として追加
+                    state.posts[state.selectedDate] = [...datePosts, newPost];
+                    showMessage('投稿が削除されていたため、新規投稿として保存しました', 'success');
+                }
             } else {
                 state.posts[state.selectedDate] = [...datePosts, newPost];
                 // 新規投稿の場合、作成した投稿のIDを設定
