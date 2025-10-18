@@ -20,7 +20,6 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const ACTIVE_USERS_FILE = 'active_users.json';
         const APP_VERSION = '2025/01/15 17:30';
 
         let gapiInited = false;
@@ -41,8 +40,6 @@
             lastUpdated: null,
             currentYear: new Date().getFullYear(),
             userName: null,
-            userEmail: null, // 追加
-            activeUsers: [], // 追加
             formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: []}
         };
 
@@ -342,154 +339,18 @@
                 });
                 const userInfo = await response.json();
                 state.userName = userInfo.name || userInfo.email;
-                state.userEmail = userInfo.email; // 追加
             } catch (error) {
                 console.error('ユーザー情報取得エラー:', error);
                 state.userName = null;
-                state.userEmail = null;
-            }
-        }
-
-        let activeUsersFileId = null;
-
-        async function updateActiveUsers() {
-            if (!state.isSignedIn || !state.folderId || !state.userEmail) return;
-            
-            try {
-                // アクティブユーザーファイルを取得または作成
-                const response = await gapi.client.drive.files.list({
-                    q: `name='${ACTIVE_USERS_FILE}' and '${state.folderId}' in parents and trashed=false`,
-                    fields: 'files(id, name)',
-                    spaces: 'drive',
-                    supportsAllDrives: true,
-                    includeItemsFromAllDrives: true
-                });
-
-                let activeUsers = {};
-                
-                if (response.result.files && response.result.files.length > 0) {
-                    activeUsersFileId = response.result.files[0].id;
-                    
-                    // 既存のアクティブユーザー情報を取得
-                    const fileContent = await gapi.client.drive.files.get({
-                        fileId: activeUsersFileId,
-                        alt: 'media',
-                        supportsAllDrives: true
-                    });
-                    
-                    if (fileContent.body) {
-                        activeUsers = JSON.parse(fileContent.body);
-                    }
-                }
-
-                // 現在時刻から3分以上前のユーザーを削除（オフラインとみなす）
-                const now = Date.now();
-                Object.keys(activeUsers).forEach(email => {
-                    if (now - new Date(activeUsers[email].lastActive).getTime() > 180000) {
-                        delete activeUsers[email];
-                    }
-                });
-
-                // 自分の情報を更新
-                activeUsers[state.userEmail] = {
-                    name: state.userName,
-                    lastActive: new Date().toISOString()
-                };
-
-                // ファイルに保存
-                const content = JSON.stringify(activeUsers);
-                const file = new Blob([content], { type: 'application/json' });
-                const metadata = activeUsersFileId ? {
-                    name: ACTIVE_USERS_FILE,
-                    mimeType: 'application/json'
-                } : {
-                    name: ACTIVE_USERS_FILE,
-                    mimeType: 'application/json',
-                    parents: [state.folderId]
-                };
-
-                const form = new FormData();
-                form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-                form.append('file', file);
-
-                const url = activeUsersFileId
-                    ? `https://www.googleapis.com/upload/drive/v3/files/${activeUsersFileId}?uploadType=multipart&supportsAllDrives=true`
-                    : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`;
-
-                const saveResponse = await fetch(url, {
-                    method: activeUsersFileId ? 'PATCH' : 'POST',
-                    headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-                    body: form
-                });
-
-                if (saveResponse.ok) {
-                    const result = await saveResponse.json();
-                    if (!activeUsersFileId) {
-                        activeUsersFileId = result.id;
-                    }
-                }
-
-                // 自分以外のアクティブユーザーをstateに保存
-                state.activeUsers = Object.entries(activeUsers)
-                    .filter(([email]) => email !== state.userEmail)
-                    .map(([email, data]) => data.name);
-
-                render();
-
-            } catch (error) {
-                console.error('アクティブユーザー更新エラー:', error);
-            }
-        }
-
-        async function removeActiveUser() {
-            if (!state.isSignedIn || !activeUsersFileId || !state.userEmail) return;
-            
-            try {
-                // アクティブユーザー情報を取得
-                const fileContent = await gapi.client.drive.files.get({
-                    fileId: activeUsersFileId,
-                    alt: 'media',
-                    supportsAllDrives: true
-                });
-                
-                if (fileContent.body) {
-                    const activeUsers = JSON.parse(fileContent.body);
-                    
-                    // 自分の情報を削除
-                    delete activeUsers[state.userEmail];
-
-                    // ファイルに保存
-                    const content = JSON.stringify(activeUsers);
-                    const file = new Blob([content], { type: 'application/json' });
-                    const metadata = {
-                        name: ACTIVE_USERS_FILE,
-                        mimeType: 'application/json'
-                    };
-
-                    const form = new FormData();
-                    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-                    form.append('file', file);
-
-                    await fetch(`https://www.googleapis.com/upload/drive/v3/files/${activeUsersFileId}?uploadType=multipart&supportsAllDrives=true`, {
-                        method: 'PATCH',
-                        headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-                        body: form
-                    });
-                }
-            } catch (error) {
-                console.error('アクティブユーザー削除エラー:', error);
             }
         }
 
         function handleSignOut() {
-            removeActiveUser(); // 追加
             gapi.client.setToken(null);
             localStorage.removeItem('google_access_token');
             accessToken = null;
             state.isSignedIn = false;
             state.userName = null;
-            state.userEmail = null; // 追加
-            state.activeUsers = []; // 追加
             state.posts = {};
             state.folderId = null;
             fileId = null;
@@ -529,9 +390,6 @@
                 
                 // 現在表示中の年のデータを読み込む
                 await loadYearData();
-                
-                // アクティブユーザー情報を更新
-                await updateActiveUsers(); // 追加
                 
                 console.log('✅ セットアップ完了');
             } catch (error) {
@@ -1443,18 +1301,7 @@
                     <div class="flex flex-col items-end gap-1">
                         ${state.isSignedIn ? `
                             <div class="flex items-center gap-2">
-                                <div class="flex flex-col items-end gap-0.5">
-                                    ${state.userName ? `<div class="text-xs text-gray-600">ログイン中: <span class="font-semibold">${state.userName}</span></div>` : ''}
-                                    ${state.activeUsers.length > 0 ? `
-                                        <div class="text-xs text-blue-600">
-                                            👥 他の接続中 (${state.activeUsers.length}人): ${state.activeUsers.join(', ')}
-                                        </div>
-                                    ` : `
-                                        <div class="text-xs text-gray-400">
-                                            他に接続中のユーザーはいません
-                                        </div>
-                                    `}
-                                </div>
+                                ${state.userName ? `<div class="text-xs text-gray-600">ログイン中: ${state.userName}</div>` : ''}
                                 <div class="inline-flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1 rounded-lg text-xs">
                                     ✅ 共有ドライブ接続済
                                 </div>
@@ -1505,26 +1352,12 @@
             gapiLoaded();
             gisLoaded();
             
-            // 30秒ごとにアクティブユーザー情報を更新
-            setInterval(async () => {
-                if (state.isSignedIn) {
-                    await updateActiveUsers();
-                }
-            }, 30000); // 30秒
-            
             // 3分ごとに更新をチェック
             setInterval(async () => {
                 if (state.isSignedIn && !state.isSaving) {
                     await checkForUpdates();
                 }
-            }, 180000); // 3分
-        });
-
-        // ページを閉じる時にアクティブユーザーから削除
-        window.addEventListener('beforeunload', () => {
-            if (state.isSignedIn) {
-                removeActiveUser();
-            }
+            }, 180000); // 180000ms = 3分
         });
     </script>
 </body>
