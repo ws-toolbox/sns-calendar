@@ -359,6 +359,39 @@
             showMessage('ログアウトしました', 'success');
         }
 
+        async function refreshTokenIfNeeded() {
+            if (!state.isSignedIn) return;
+            
+            try {
+                // トークンの有効性をテスト
+                await gapi.client.drive.files.list({
+                    pageSize: 1,
+                    supportsAllDrives: true
+                });
+            } catch (error) {
+                console.log('Token expired, refreshing...');
+                
+                // トークンが期限切れの場合、再認証を試みる
+                tokenClient.callback = async (resp) => {
+                    if (resp.error !== undefined) {
+                        console.error('Token refresh failed:', resp);
+                        showMessage('認証が切れました。再ログインしてください。', 'error');
+                        handleSignOut();
+                        return;
+                    }
+                    accessToken = gapi.client.getToken().access_token;
+                    state.isSignedIn = true;
+                    localStorage.setItem('google_access_token', JSON.stringify(gapi.client.getToken()));
+                    await getUserInfo();
+                    showMessage('認証を更新しました', 'success');
+                    render();
+                };
+                
+                // プロンプトなしで再認証を試みる
+                tokenClient.requestAccessToken({prompt: ''});
+            }
+        }
+
         async function loadFromDrive() {
             try {
                 let folderId = null;
@@ -449,6 +482,9 @@
         }
 
         async function checkForUpdates() {
+            // トークンの有効性をチェック
+            await refreshTokenIfNeeded();
+            
             try {
                 const currentYear = state.currentDate.getFullYear();
                 const fileName = `sns_calendar_data_${currentYear}.json`;
@@ -497,6 +533,9 @@
         
         async function saveToDrive() {
             if (!state.isSignedIn || !state.folderId || state.isSaving) return;
+            
+            // トークンの有効性をチェック
+            await refreshTokenIfNeeded();
             
             state.isSaving = true;
             render();
@@ -1352,6 +1391,13 @@
         window.addEventListener('load', () => {
             gapiLoaded();
             gisLoaded();
+            
+            // 30分ごとにトークンの有効性をチェック
+            setInterval(async () => {
+                if (state.isSignedIn) {
+                    await refreshTokenIfNeeded();
+                }
+            }, 1800000); // 1800000ms = 30分
             
             // 3分ごとに更新をチェック
             setInterval(async () => {
