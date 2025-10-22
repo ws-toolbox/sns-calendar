@@ -21,7 +21,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/22 12:20';
+        const APP_VERSION = '2025/01/22 12:25';
 
         let gapiInited = false;
         let gisInited = false;
@@ -41,8 +41,7 @@
             lastUpdated: null,
             currentYear: new Date().getFullYear(),
             userName: null,
-            twitterTokens: null,
-            formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: [], scheduledTime: ''}
+            formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: []}
         };
 
         async function findAndDownloadVideo(productNumber) {
@@ -344,90 +343,6 @@
             } catch (error) {
                 console.error('ユーザー情報取得エラー:', error);
                 state.userName = null;
-            }
-        }
-
-        async function loadTwitterTokens() {
-            if (!state.folderId) return null;
-            
-            try {
-                const response = await gapi.client.drive.files.list({
-                    q: `name='api-token.txt' and '${state.folderId}' in parents and trashed=false`,
-                    fields: 'files(id, name)',
-                    spaces: 'drive',
-                    supportsAllDrives: true,
-                    includeItemsFromAllDrives: true
-                });
-
-                if (response.result.files && response.result.files.length > 0) {
-                    const fileId = response.result.files[0].id;
-                    const fileContent = await gapi.client.drive.files.get({
-                        fileId: fileId,
-                        alt: 'media',
-                        supportsAllDrives: true
-                    });
-
-                    if (fileContent.body) {
-                        const lines = fileContent.body.split('\n');
-                        const tokens = {};
-                        
-                        lines.forEach(line => {
-                            if (line.includes('API Key:')) {
-                                tokens.apiKey = line.split(':')[1].trim();
-                            } else if (line.includes('API Key Secret:')) {
-                                tokens.apiKeySecret = line.split(':')[1].trim();
-                            } else if (line.includes('Access Token:')) {
-                                tokens.accessToken = line.split(':')[1].trim();
-                            } else if (line.includes('Access Token Secret:')) {
-                                tokens.accessTokenSecret = line.split(':')[1].trim();
-                            }
-                        });
-                        
-                        state.twitterTokens = tokens;
-                        console.log('✅ Twitter APIトークン読み込み成功');
-                    }
-                }
-            } catch (error) {
-                console.error('Twitter APIトークン読み込みエラー:', error);
-            }
-        }
-
-        async function postToTwitter() {
-            // チェック完了者がいるか確認
-            if (!state.formData.checks || state.formData.checks.length === 0) {
-                showMessage('投稿前にチェックを完了してください', 'error');
-                return;
-            }
-            
-            // Twitter APIトークンの確認
-            if (!state.twitterTokens) {
-                showMessage('Twitter APIトークンが読み込まれていません', 'error');
-                return;
-            }
-            
-            // 投稿内容の確認
-            const postText = state.formData.text || '';
-            const links = (state.formData.links || []).filter(l => l.trim());
-            const fullText = links.length > 0 ? `${postText}\n\n${links.join('\n')}` : postText;
-            
-            const confirmMessage = `以下の内容でXに投稿します。よろしいですか？\n\n${fullText.substring(0, 100)}${fullText.length > 100 ? '...' : ''}\n\n画像: ${state.formData.images.length}個`;
-            
-            if (!confirm(confirmMessage)) {
-                return;
-            }
-            
-            try {
-                showMessage('Xに投稿中...', 'success');
-                
-                // OAuth 1.0a 署名を生成する必要があるため、
-                // ここではGoogle Apps Scriptを経由する実装に変更することを推奨します
-                // ブラウザから直接OAuth 1.0a署名を生成するのは複雑で危険です
-                
-                showMessage('⚠️ ブラウザから直接X APIを呼び出すにはOAuth 1.0a署名が必要です。Google Apps Script経由の実装を推奨します。', 'error');
-                
-            } catch (error) {
-                console.error('X投稿エラー:', error);
-                showMessage(`X投稿に失敗しました: ${error.message}`, 'error');
             }
         }
 
@@ -827,8 +742,7 @@
                 productNumber: state.formData.productNumber || '',
                 embedProduct: state.formData.embedProduct || false,
                 remarks: state.formData.remarks || '',
-                links: state.formData.links || [],
-                scheduledTime: state.formData.scheduledTime || ''
+                links: state.formData.links || []
             };
          
             const datePosts = state.posts[state.selectedDate] || [];
@@ -951,9 +865,6 @@
                     }
                     if (!state.formData.links) {
                         state.formData.links = [];
-                    }
-                    if (!state.formData.scheduledTime) {
-                        state.formData.scheduledTime = '';
                     }
                     state.editingPostId = postId;
                     state.viewMode = 'view';
