@@ -1074,6 +1074,12 @@
             
             // 投稿内容を準備
             const postText = state.formData.text || '';
+            
+            // テキストまたはメディアが必要
+            if (!postText && !state.formData.embedProduct && (!state.formData.images || state.formData.images.length === 0)) {
+                showMessage('❌ 投稿テキストまたはメディアを入力してください', 'error');
+                return;
+            }
             const links = (state.formData.links || []).filter(l => l.trim());
             let fullText = postText;
             
