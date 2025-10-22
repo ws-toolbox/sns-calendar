@@ -1306,7 +1306,8 @@
                 
             } catch (error) {
                 console.error('YouTube投稿エラー:', error);
-                showMessage(`❌ YouTube投稿に失敗しました: ${error.message}`, 'error');
+                console.error('エラー詳細:', error.result || error);
+                showMessage(`❌ YouTube投稿に失敗しました: ${error.message || error.toString()}`, 'error');
             }
         }
         
