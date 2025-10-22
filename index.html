@@ -21,7 +21,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/21 11:00';
+        const APP_VERSION = '2025/01/22 11:00';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1166,7 +1166,7 @@
                                 </div>
                             ` : ''}
                             <div>
-                                <div class="bg-gray-50 p-2 rounded-lg rounded-b-none border border-gray-200 border-b-0 whitespace-pre-wrap text-sm max-h-32 overflow-y-auto leading-relaxed scrollbar-thin" style="line-height: 1.6; background: linear-gradient(white 30%, rgba(255,255,255,0)), linear-gradient(rgba(255,255,255,0), white 70%) 0 100%, radial-gradient(farthest-side at 50% 0, rgba(0,0,0,.2), rgba(0,0,0,0)), radial-gradient(farthest-side at 50% 100%, rgba(0,0,0,.2), rgba(0,0,0,0)) 0 100%; background-repeat: no-repeat; background-color: rgb(249 250 251); background-size: 100% 40px, 100% 40px, 100% 14px, 100% 14px; background-attachment: local, local, scroll, scroll;">${state.formData.text || 'テキストなし'}</div>
+                                <div class="bg-gray-50 p-2 rounded-lg rounded-b-none border border-gray-200 border-b-0 whitespace-pre-wrap text-sm leading-relaxed">${state.formData.text || 'テキストなし'}</div>
                                 <button onclick="copyToClipboard(\`${state.formData.text}\`)" class="w-full flex items-center justify-center gap-2 bg-gray-200 text-gray-600 py-1.5 rounded-lg rounded-t-none hover:bg-gray-300 transition-colors text-xs border border-gray-200 border-t-0">
                                     📋 テキストをコピー
                                 </button>
