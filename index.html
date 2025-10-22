@@ -744,16 +744,39 @@
          
             const datePosts = state.posts[state.selectedDate] || [];
             if (state.editingPostId) {
-                // 編集中の投稿が存在するか確認
-                const existingPostIndex = datePosts.findIndex(p => p.id === state.editingPostId);
+                // 全ての日付から該当する投稿を検索
+                let oldDateStr = null;
+                for (const dateStr in state.posts) {
+                    const foundPost = state.posts[dateStr].find(p => p.id === state.editingPostId);
+                    if (foundPost) {
+                        oldDateStr = dateStr;
+                        break;
+                    }
+                }
                 
-                if (existingPostIndex !== -1) {
-                    // 投稿が存在する場合は更新
-                    state.posts[state.selectedDate] = datePosts.map(p => p.id === state.editingPostId ? newPost : p);
-                } else {
-                    // 投稿が存在しない（他ユーザーが削除した）場合は新規投稿として追加
+                // 元の日付と異なる場合は移動
+                if (oldDateStr && oldDateStr !== state.selectedDate) {
+                    // 元の日付から削除
+                    const oldDatePosts = state.posts[oldDateStr].filter(p => p.id !== state.editingPostId);
+                    if (oldDatePosts.length === 0) {
+                        delete state.posts[oldDateStr];
+                    } else {
+                        state.posts[oldDateStr] = oldDatePosts;
+                    }
+                    
+                    // 新しい日付に追加
                     state.posts[state.selectedDate] = [...datePosts, newPost];
-                    showMessage('投稿が削除されていたため、新規投稿として保存しました', 'success');
+                    showMessage('投稿日を変更して保存しました', 'success');
+                } else {
+                    // 同じ日付内で更新
+                    const existingPostIndex = datePosts.findIndex(p => p.id === state.editingPostId);
+                    
+                    if (existingPostIndex !== -1) {
+                        state.posts[state.selectedDate] = datePosts.map(p => p.id === state.editingPostId ? newPost : p);
+                    } else {
+                        state.posts[state.selectedDate] = [...datePosts, newPost];
+                        showMessage('投稿が削除されていたため、新規投稿として保存しました', 'success');
+                    }
                 }
             } else {
                 state.posts[state.selectedDate] = [...datePosts, newPost];
@@ -863,6 +886,20 @@
 
         function switchToEditMode() {
             state.viewMode = 'edit';
+            render();
+        }
+
+        function changeSelectedDate(newDate) {
+            if (!newDate || newDate === state.selectedDate) return;
+            
+            // 新しい日付を設定
+            const oldDate = state.selectedDate;
+            state.selectedDate = newDate;
+            
+            // カレンダー表示も新しい日付の月に移動
+            const newDateObj = new Date(newDate);
+            state.currentDate = new Date(newDateObj.getFullYear(), newDateObj.getMonth(), 1);
+            
             render();
         }
 
@@ -1209,6 +1246,12 @@
                             </button>
                         </div>
                         <div class="space-y-3">
+                            ${state.editingPostId ? `
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 mb-1">投稿日</label>
+                                <input type="date" value="${state.selectedDate}" onchange="changeSelectedDate(this.value)" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                            </div>
+                            ` : ''}
                             <div>
                                 <label class="block text-xs font-semibold text-gray-700 mb-1">投稿タイトル</label>
                                 <input type="text" value="${state.formData.title}" onchange="state.formData.title = this.value" placeholder="例: 新商品告知" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
