@@ -41,7 +41,8 @@
             lastUpdated: null,
             currentYear: new Date().getFullYear(),
             userName: null,
-            formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: []}
+            twitterTokens: null,
+            formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: [], scheduledTime: ''}
         };
 
         async function findAndDownloadVideo(productNumber) {
@@ -346,6 +347,90 @@
             }
         }
 
+        async function loadTwitterTokens() {
+            if (!state.folderId) return null;
+            
+            try {
+                const response = await gapi.client.drive.files.list({
+                    q: `name='api-token.txt' and '${state.folderId}' in parents and trashed=false`,
+                    fields: 'files(id, name)',
+                    spaces: 'drive',
+                    supportsAllDrives: true,
+                    includeItemsFromAllDrives: true
+                });
+
+                if (response.result.files && response.result.files.length > 0) {
+                    const fileId = response.result.files[0].id;
+                    const fileContent = await gapi.client.drive.files.get({
+                        fileId: fileId,
+                        alt: 'media',
+                        supportsAllDrives: true
+                    });
+
+                    if (fileContent.body) {
+                        const lines = fileContent.body.split('\n');
+                        const tokens = {};
+                        
+                        lines.forEach(line => {
+                            if (line.includes('API Key:')) {
+                                tokens.apiKey = line.split(':')[1].trim();
+                            } else if (line.includes('API Key Secret:')) {
+                                tokens.apiKeySecret = line.split(':')[1].trim();
+                            } else if (line.includes('Access Token:')) {
+                                tokens.accessToken = line.split(':')[1].trim();
+                            } else if (line.includes('Access Token Secret:')) {
+                                tokens.accessTokenSecret = line.split(':')[1].trim();
+                            }
+                        });
+                        
+                        state.twitterTokens = tokens;
+                        console.log('✅ Twitter APIトークン読み込み成功');
+                    }
+                }
+            } catch (error) {
+                console.error('Twitter APIトークン読み込みエラー:', error);
+            }
+        }
+
+        async function postToTwitter() {
+            // チェック完了者がいるか確認
+            if (!state.formData.checks || state.formData.checks.length === 0) {
+                showMessage('投稿前にチェックを完了してください', 'error');
+                return;
+            }
+            
+            // Twitter APIトークンの確認
+            if (!state.twitterTokens) {
+                showMessage('Twitter APIトークンが読み込まれていません', 'error');
+                return;
+            }
+            
+            // 投稿内容の確認
+            const postText = state.formData.text || '';
+            const links = (state.formData.links || []).filter(l => l.trim());
+            const fullText = links.length > 0 ? `${postText}\n\n${links.join('\n')}` : postText;
+            
+            const confirmMessage = `以下の内容でXに投稿します。よろしいですか？\n\n${fullText.substring(0, 100)}${fullText.length > 100 ? '...' : ''}\n\n画像: ${state.formData.images.length}個`;
+            
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+            
+            try {
+                showMessage('Xに投稿中...', 'success');
+                
+                // OAuth 1.0a 署名を生成する必要があるため、
+                // ここではGoogle Apps Scriptを経由する実装に変更することを推奨します
+                // ブラウザから直接OAuth 1.0a署名を生成するのは複雑で危険です
+                
+                showMessage('⚠️ ブラウザから直接X APIを呼び出すにはOAuth 1.0a署名が必要です。Google Apps Script経由の実装を推奨します。', 'error');
+                
+            } catch (error) {
+                console.error('X投稿エラー:', error);
+                showMessage(`X投稿に失敗しました: ${error.message}`, 'error');
+            }
+        }
+
         function handleSignOut() {
             gapi.client.setToken(null);
             localStorage.removeItem('google_access_token');
@@ -424,6 +509,9 @@
                 
                 // 現在表示中の年のデータを読み込む
                 await loadYearData();
+                
+                // Twitter APIトークンを読み込む
+                await loadTwitterTokens();
                 
                 console.log('✅ セットアップ完了');
             } catch (error) {
@@ -739,7 +827,8 @@
                 productNumber: state.formData.productNumber || '',
                 embedProduct: state.formData.embedProduct || false,
                 remarks: state.formData.remarks || '',
-                links: state.formData.links || []
+                links: state.formData.links || [],
+                scheduledTime: state.formData.scheduledTime || ''
             };
          
             const datePosts = state.posts[state.selectedDate] || [];
@@ -863,6 +952,9 @@
                     if (!state.formData.links) {
                         state.formData.links = [];
                     }
+                    if (!state.formData.scheduledTime) {
+                        state.formData.scheduledTime = '';
+                    }
                     state.editingPostId = postId;
                     state.viewMode = 'view';
                 }
@@ -876,7 +968,8 @@
                     productNumber: '',
                     embedProduct: false,
                     remarks: '',
-                    links: ['']  // 空のリンクを1つ追加
+                    links: [''],
+                    scheduledTime: ''
                 };
                 state.editingPostId = null;
                 state.viewMode = 'edit';
@@ -1235,6 +1328,13 @@
                                     🗑
                                 </button>
                             </div>
+                            ${platforms.includes('x') ? `
+                                <div class="pt-2">
+                                    <button onclick="postToTwitter()" class="w-full bg-black hover:bg-gray-800 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm">
+                                        𝕏 Xに投稿${state.formData.scheduledTime ? ` (${state.formData.scheduledTime})` : ' (即時)'}
+                                    </button>
+                                </div>
+                            ` : ''}
                         </div>
                     </div>`;
                 } else {
@@ -1277,6 +1377,19 @@
                                         {value: 'youtube', label: 'YT', color: 'bg-red-600'}
                                     ].map(platform => `
                                         <button onclick="togglePlatform('${platform.value}')" class="py-1.5 px-3 rounded-lg font-semibold text-white transition-all text-xs ${state.formData.platforms.includes(platform.value) ? `${platform.color} ring-2 ring-offset-2 ring-blue-300` : 'bg-gray-300 hover:bg-gray-400'}">
+                                            ${platform.label}
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            ${state.formData.platforms.includes('x') ? `
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 mb-1">X投稿時刻（省略時は即時投稿）</label>
+                                <input type="datetime-local" value="${state.formData.scheduledTime || ''}" onchange="state.formData.scheduledTime = this.value" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                            </div>
+                            ` : ''}
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-700 mb-1">投稿テキスト</label>
                                             ${platform.label}
                                         </button>
                                     `).join('')}
