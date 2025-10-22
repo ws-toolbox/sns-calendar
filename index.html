@@ -21,7 +21,8 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/22 13:00';
+        const YOUTUBE_CHANNEL_ID = 'UCssDJUM5RWuahuz6rhw5tHA';
+        const APP_VERSION = '2025/01/22 15:00';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1274,6 +1275,7 @@
                 // コミュニティ投稿を作成
                 const postData = {
                     snippet: {
+                        channelId: YOUTUBE_CHANNEL_ID,
                         description: postText
                     }
                 };
