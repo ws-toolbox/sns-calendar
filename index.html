@@ -14,15 +14,14 @@
 
     <script>
         const CLIENT_ID = '417822818519-8imosvo7c9e2gem7cp0rse0vm8vrjlou.apps.googleusercontent.com';
-        const SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/youtube.force-ssl';
+        const SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets';
         const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
         const FOLDER_NAME = 'SNS投稿管理';
         const SHARED_DRIVE_ID = '0AHJk3pS7tSEgUk9PVA';
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const YOUTUBE_CHANNEL_ID = 'UCssDJUM5RWuahuz6rhw5tHA';
-        const APP_VERSION = '2025/01/22 15:00';
+        const APP_VERSION = '2025/01/22 12:50';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1200,117 +1199,7 @@
                 showMessage(`❌ X投稿に失敗しました: ${error.message}`, 'error');
             }
         }
-
-        async function postToYouTube() {
-            // チェック完了者がいるか確認
-            if (!state.formData.checks || state.formData.checks.length === 0) {
-                showMessage('❌ 投稿前にチェックを完了してください', 'error');
-                return;
-            }
-            
-            // 投稿内容を準備
-            const postText = state.formData.text || '';
-            
-            // テキストまたは画像が必要
-            if (!postText && (!state.formData.images || state.formData.images.length === 0)) {
-                showMessage('❌ 投稿テキストまたは画像を入力してください', 'error');
-                return;
-            }
-            
-            // 5000文字制限チェック
-            if (postText.length > 5000) {
-                showMessage(`❌ テキストが長すぎます（${postText.length}/5000文字）`, 'error');
-                return;
-            }
-            
-            // 確認ダイアログ
-            const previewText = postText.length > 100 ? postText.substring(0, 100) + '...' : postText;
-            let mediaText = '';
-            if (state.formData.images.length > 0) {
-                mediaText += `\n📷 画像: ${Math.min(state.formData.images.length, 1)}個（最初の1枚のみ投稿）`;
-            }
-            
-            if (!confirm(`以下の内容でYouTubeコミュニティに投稿します。よろしいですか？\n\n${previewText}${mediaText}`)) {
-                return;
-            }
-            
-            try {
-                showMessage('⏳ YouTubeコミュニティに投稿中...', 'success');
-                
-                // 画像がある場合は最初の1枚のみアップロード
-                let mediaResourceId = null;
-                if (state.formData.images && state.formData.images.length > 0) {
-                    const firstImage = state.formData.images[0];
-                    
-                    // Base64からBlobに変換
-                    const response = await fetch(firstImage.data);
-                    const blob = await response.blob();
-                    
-                    // YouTube Data APIにアップロード
-                    const metadata = {
-                        snippet: {
-                            title: `YouTube Community Post - ${new Date().toLocaleString('ja-JP')}`
-                        }
-                    };
-                    
-                    const form = new FormData();
-                    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-                    form.append('file', blob);
-                    
-                    const uploadResponse = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?part=snippet&uploadType=multipart', {
-                        method: 'POST',
-                        headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-                        body: form
-                    });
-                    
-                    if (uploadResponse.ok) {
-                        const uploadResult = await uploadResponse.json();
-                        mediaResourceId = uploadResult.id;
-                        console.log('✅ 画像アップロード成功:', mediaResourceId);
-                    } else {
-                        throw new Error('画像のアップロードに失敗しました');
-                    }
-                }
-                
-                // コミュニティ投稿を作成
-                const postData = {
-                    snippet: {
-                        channelId: YOUTUBE_CHANNEL_ID,
-                        description: postText
-                    }
-                };
-                
-                // 画像がある場合はリソースIDを追加
-                if (mediaResourceId) {
-                    postData.contentDetails = {
-                        bulletin: {
-                            resourceId: {
-                                kind: 'youtube#video',
-                                videoId: mediaResourceId
-                            }
-                        }
-                    };
-                }
-                
-                const postResponse = await gapi.client.request({
-                    path: 'https://www.googleapis.com/youtube/v3/activities?part=snippet,contentDetails',
-                    method: 'POST',
-                    body: postData
-                });
-                
-                if (postResponse.status === 200) {
-                    showMessage('✅ YouTubeコミュニティに投稿しました！', 'success');
-                } else {
-                    throw new Error('投稿に失敗しました');
-                }
-                
-            } catch (error) {
-                console.error('YouTube投稿エラー:', error);
-                console.error('エラー詳細:', error.result || error);
-                showMessage(`❌ YouTube投稿に失敗しました: ${error.message || error.toString()}`, 'error');
-            }
-        }
-        
+    
       function render() {
             const { daysInMonth, startingDayOfWeek } = getDaysInMonth(state.currentDate);
             const monthName = state.currentDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
@@ -1490,7 +1379,6 @@
                                 </button>
                             </div>
                             ${platforms.includes('x') ? '<div class="pt-2"><button onclick="postToX()" class="w-full bg-black hover:bg-gray-800 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm">𝕏 に投稿</button></div>' : ''}
-                            ${platforms.includes('youtube') ? '<div class="pt-2"><button onclick="postToYouTube()" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm">YouTubeコミュニティ に投稿</button></div>' : ''}
                         </div>
                     </div>`;
                 } else {
