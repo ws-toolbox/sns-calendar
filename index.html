@@ -21,7 +21,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/22 12:40';
+        const APP_VERSION = '2025/01/22 12:45';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1065,8 +1065,59 @@
             render();
         }
 
-        function postToX() {
-            alert('Xに投稿する機能（まだ仮実装）');
+        async function postToX() {
+            // チェック完了者がいるか確認
+            if (!state.formData.checks || state.formData.checks.length === 0) {
+                showMessage('❌ 投稿前にチェックを完了してください', 'error');
+                return;
+            }
+            
+            // 投稿内容を準備
+            const postText = state.formData.text || '';
+            const links = (state.formData.links || []).filter(l => l.trim());
+            let fullText = postText;
+            
+            // リンクを改行して追加
+            if (links.length > 0) {
+                fullText += '\n\n' + links.join('\n');
+            }
+            
+            // 280文字制限チェック
+            if (fullText.length > 280) {
+                showMessage(`❌ テキストが長すぎます（${fullText.length}/280文字）`, 'error');
+                return;
+            }
+            
+            // 確認ダイアログ
+            const previewText = fullText.length > 100 ? fullText.substring(0, 100) + '...' : fullText;
+            const scheduleText = state.formData.scheduledTime ? `\n\n⏰ 予約: ${state.formData.scheduledTime.replace('T', ' ')}` : '\n\n🚀 即時投稿';
+            const mediaText = state.formData.images.length > 0 ? `\n📷 メディア: ${state.formData.images.length}個` : '';
+            
+            if (!confirm(`以下の内容でXに投稿します。よろしいですか？\n\n${previewText}${scheduleText}${mediaText}`)) {
+                return;
+            }
+            
+            try {
+                showMessage('⏳ Xに投稿中...', 'success');
+                
+                // TODO: ここに実際のX API呼び出しを実装
+                // 現時点ではエラーメッセージを表示
+                showMessage('⚠️ X API連携はまだ実装されていません。\n\nGoogle Apps Script経由での実装が必要です。', 'error');
+                
+                // 実装例（OAuth 2.0トークンが必要）:
+                // const response = await fetch('https://api.twitter.com/2/tweets', {
+                //     method: 'POST',
+                //     headers: {
+                //         'Authorization': 'Bearer YOUR_ACCESS_TOKEN',
+                //         'Content-Type': 'application/json'
+                //     },
+                //     body: JSON.stringify({ text: fullText })
+                // });
+                
+            } catch (error) {
+                console.error('X投稿エラー:', error);
+                showMessage(`❌ X投稿に失敗しました: ${error.message}`, 'error');
+            }
         }
 
       function render() {
