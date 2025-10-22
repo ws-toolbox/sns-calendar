@@ -1088,10 +1088,78 @@
                 return;
             }
             
+            // 動画埋め込みの場合、DriveのファイルIDを取得
+            let videoFileId = null;
+            if (state.formData.embedProduct && state.formData.productNumber) {
+                try {
+                    const response = await gapi.client.drive.files.list({
+                        q: `name='${state.formData.productNumber}.mp4' and '${VIDEO_FOLDER_ID}' in parents and trashed=false`,
+                        fields: 'files(id, name)',
+                        spaces: 'drive',
+                        supportsAllDrives: true,
+                        includeItemsFromAllDrives: true
+                    });
+                    
+                    if (response.result.files && response.result.files.length > 0) {
+                        videoFileId = response.result.files[0].id;
+                        console.log('✅ 動画ファイルID取得:', videoFileId);
+                    } else {
+                        showMessage(`❌ 動画ファイル「${state.formData.productNumber}.mp4」が見つかりませんでした`, 'error');
+                        return;
+                    }
+                } catch (error) {
+                    console.error('動画ファイルID取得エラー:', error);
+                    showMessage('❌ 動画ファイルの取得に失敗しました', 'error');
+                    return;
+                }
+            }
+            
+            // 手動アップロードした画像のファイルIDを準備
+            const imageFileIds = [];
+            if (state.formData.images && state.formData.images.length > 0) {
+                showMessage('⏳ 画像をGoogle Driveにアップロード中...', 'success');
+                
+                for (const image of state.formData.images) {
+                    try {
+                        // Base64からBlobに変換
+                        const response = await fetch(image.data);
+                        const blob = await response.blob();
+                        
+                        // Google Driveにアップロード
+                        const metadata = {
+                            name: `temp_${Date.now()}_${image.name}`,
+                            parents: [VIDEO_FOLDER_ID]
+                        };
+                        
+                        const form = new FormData();
+                        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+                        form.append('file', blob);
+                        
+                        const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+                            method: 'POST',
+                            headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+                            body: form
+                        });
+                        
+                        if (uploadResponse.ok) {
+                            const result = await uploadResponse.json();
+                            imageFileIds.push(result.id);
+                            console.log('✅ 画像アップロード成功:', result.id);
+                        }
+                    } catch (error) {
+                        console.error('画像アップロードエラー:', error);
+                        showMessage('❌ 画像のアップロードに失敗しました', 'error');
+                        return;
+                    }
+                }
+            }
+            
             // 確認ダイアログ
             const previewText = fullText.length > 100 ? fullText.substring(0, 100) + '...' : fullText;
             const scheduleText = state.formData.scheduledTime ? `\n\n⏰ 予約: ${state.formData.scheduledTime.replace('T', ' ')}` : '\n\n🚀 即時投稿';
-            const mediaText = state.formData.images.length > 0 ? `\n📷 メディア: ${state.formData.images.length}個` : '';
+            let mediaText = '';
+            if (videoFileId) mediaText += '\n🎬 動画: 1個';
+            if (imageFileIds.length > 0) mediaText += `\n📷 画像: ${imageFileIds.length}個`;
             
             if (!confirm(`以下の内容でXに投稿します。よろしいですか？\n\n${previewText}${scheduleText}${mediaText}`)) {
                 return;
@@ -1100,26 +1168,39 @@
             try {
                 showMessage('⏳ Xに投稿中...', 'success');
                 
-                // TODO: ここに実際のX API呼び出しを実装
-                // 現時点ではエラーメッセージを表示
-                showMessage('⚠️ X API連携はまだ実装されていません。\n\nGoogle Apps Script経由での実装が必要です。', 'error');
+                // Google Apps ScriptのWeb APIを呼び出す
+                const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbydrnEuxFI4a8yaTcsFOPQTnXJA1Z2tEX_wZU6bU5gjS80k-r-YLoX_Fe8qgxy4UrsNgw/exec'; // ← 後で設定
                 
-                // 実装例（OAuth 2.0トークンが必要）:
-                // const response = await fetch('https://api.twitter.com/2/tweets', {
-                //     method: 'POST',
-                //     headers: {
-                //         'Authorization': 'Bearer YOUR_ACCESS_TOKEN',
-                //         'Content-Type': 'application/json'
-                //     },
-                //     body: JSON.stringify({ text: fullText })
-                // });
+                const requestData = {
+                    text: fullText,
+                    videoFileId: videoFileId,
+                    imageFileIds: imageFileIds,
+                    scheduledTime: state.formData.scheduledTime || null
+                };
+                
+                const response = await fetch(GAS_WEB_APP_URL, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showMessage('✅ Xに投稿しました！', 'success');
+                } else {
+                    showMessage(`❌ X投稿に失敗: ${result.error}`, 'error');
+                }
                 
             } catch (error) {
                 console.error('X投稿エラー:', error);
                 showMessage(`❌ X投稿に失敗しました: ${error.message}`, 'error');
             }
         }
-
+        
       function render() {
             const { daysInMonth, startingDayOfWeek } = getDaysInMonth(state.currentDate);
             const monthName = state.currentDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
