@@ -21,7 +21,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/01/22 12:30';
+        const APP_VERSION = '2025/01/22 12:35';
 
         let gapiInited = false;
         let gisInited = false;
@@ -41,7 +41,7 @@
             lastUpdated: null,
             currentYear: new Date().getFullYear(),
             userName: null,
-            formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: []}
+            formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: [], scheduledTime: ''}
         };
 
         async function findAndDownloadVideo(productNumber) {
@@ -742,7 +742,8 @@
                 productNumber: state.formData.productNumber || '',
                 embedProduct: state.formData.embedProduct || false,
                 remarks: state.formData.remarks || '',
-                links: state.formData.links || []
+                links: state.formData.links || [],
+                scheduledTime: state.formData.scheduledTime || ''
             };
          
             const datePosts = state.posts[state.selectedDate] || [];
@@ -865,6 +866,9 @@
                     }
                     if (!state.formData.links) {
                         state.formData.links = [];
+                    }
+                    if (!state.formData.scheduledTime) {
+                        state.formData.scheduledTime = '';
                     }
                     state.editingPostId = postId;
                     state.viewMode = 'view';
