@@ -25,7 +25,7 @@
         const INSTAGRAM_APP_SECRET = '70c616003680a73af282234235c3b82d';
         const INSTAGRAM_ACCOUNT_ID = '17841404355630376';
         const INSTAGRAM_ACCESS_TOKEN = 'EAAQVzgup6V8BP3Y4hwDOVEm2hM0bORhqiZAJN6u4RQ169IfkJ1AoNtOVFK8JhpDsgyLKrvIqfi8F50OFGPUDnayrHbDDnSmZCgS51MV9hLWRjiJuyjIW9EjZCO3XFI4GtZCm5kZAj3I7PrY4BZCnbD1udd9vBcfyyrGgHh45nVyCLVAZBv0Dx5BXirqUW6PiI6YCVvKwFSjOECBs2gYwRVfyKIUjll4FJ7yUPZAsIqZCZB4q1ztwc0HHztqBZC6teB0pAZDZD';
-        const APP_VERSION = '2025/01/22 13:25';
+        const APP_VERSION = '2025/01/22 13:30';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1387,8 +1387,6 @@ async function postToInstagram() {
                 const dayColor = currentDayOfWeek === 0 ? 'text-red-600' : (currentDayOfWeek === 6 ? 'text-blue-600' : 'text-gray-700');
                 const todayBorder = isToday ? 'border-blue-400 bg-blue-50' : 'border-gray-200';
             
-                const clickHandler = state.isSignedIn ? `onclick="openEditForm(${day}, ${post.id})"` : `onclick="showMessage('先にGoogle Driveに接続してください', 'error')"`;
-                const addClickHandler = state.isSignedIn ? `onclick="openEditForm(${day})"` : `onclick="showMessage('先にGoogle Driveに接続してください', 'error')"`;
                 const disabledClass = state.isSignedIn ? '' : 'opacity-50 cursor-not-allowed';
                 const hoverClass = state.isSignedIn ? 'hover:border-blue-200' : '';
                 
@@ -1398,6 +1396,7 @@ async function postToInstagram() {
                         <div class="space-y-1">
                             ${dayPosts.map(post => {
                                 const platforms = post.platforms || [post.platform];
+                                const clickHandler = state.isSignedIn ? `onclick="openEditForm(${day}, ${post.id})"` : `onclick="showMessage('先にGoogle Driveに接続してください', 'error')"`;
                                 const postHoverClass = state.isSignedIn ? 'hover:border-blue-400 cursor-pointer hover:shadow-sm' : 'cursor-not-allowed';
                                 return `<div ${clickHandler} class="text-xs bg-white p-2 rounded border border-gray-200 ${postHoverClass} transition-all">
                                     <div class="flex items-center gap-1 flex-wrap">
@@ -1409,7 +1408,7 @@ async function postToInstagram() {
                                     </div>
                                 </div>`;
                             }).join('')}
-                            <button ${addClickHandler} class="w-full text-[11px] ${state.isSignedIn ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-50 cursor-pointer' : 'text-gray-300 cursor-not-allowed'} py-1 flex items-center justify-center gap-1 rounded transition-colors" ${state.isSignedIn ? '' : 'disabled'}>
+                            <button ${state.isSignedIn ? `onclick="openEditForm(${day})"` : `onclick="showMessage('先にGoogle Driveに接続してください', 'error')"`} class="w-full text-[11px] ${state.isSignedIn ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-50 cursor-pointer' : 'text-gray-300 cursor-not-allowed'} py-1 flex items-center justify-center gap-1 rounded transition-colors">
                                 <span>+</span> 追加
                             </button>
                         </div>
