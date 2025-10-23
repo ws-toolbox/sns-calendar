@@ -25,7 +25,7 @@
         const INSTAGRAM_APP_SECRET = '70c616003680a73af282234235c3b82d';
         const INSTAGRAM_ACCOUNT_ID = '17841404355630376';
         const INSTAGRAM_ACCESS_TOKEN = 'IGAA0amBSswAZABZAFFGS2Q2djVvWEJSSzJMOVJRaHVIOG1HNEgwRFFRclAydzRTMnhLcm41b3plWDBBQ0JYRm1yY1A0RjZAEeUJOUDBaQjRWTVdJOGttaWxYMkZAaQnhSMTI0MTYwbWVRbDlXZADl1Q1VXQ0pET3hkNURLUDhkbXJtZAwZDZD';
-        const APP_VERSION = '2025/01/22 12:50';
+        const APP_VERSION = '2025/01/22 12:55';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1208,7 +1208,7 @@
             }
         }
 
-        async function postToInstagram() {
+async function postToInstagram() {
             // チェック完了者がいるか確認
             if (!state.formData.checks || state.formData.checks.length === 0) {
                 showMessage('❌ 投稿前にチェックを完了してください', 'error');
@@ -1248,43 +1248,47 @@
             try {
                 showMessage('⏳ Instagramに投稿中...', 'success');
                 
-                // 画像を1枚ずつアップロード
-                const mediaIds = [];
+                // 画像を1枚ずつimgurにアップロード
+                const imageUrls = [];
+                const IMGUR_CLIENT_ID = 'eb06e85da1c3145'; // 公開用クライアントID
                 
                 for (let i = 0; i < state.formData.images.length; i++) {
                     const image = state.formData.images[i];
                     
-                    // Base64からBlobに変換
-                    const response = await fetch(image.data);
-                    const blob = await response.blob();
+                    // Base64データから "data:image/jpeg;base64," の部分を削除
+                    const base64Data = image.data.split(',')[1];
                     
-                    // 一時的にGoogle Driveにアップロード
-                    const metadata = {
-                        name: `temp_instagram_${Date.now()}_${i}.jpg`,
-                        parents: [VIDEO_FOLDER_ID]
-                    };
+                    // imgurにアップロード
+                    const imgurFormData = new FormData();
+                    imgurFormData.append('image', base64Data);
+                    imgurFormData.append('type', 'base64');
                     
-                    const form = new FormData();
-                    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-                    form.append('file', blob);
-                    
-                    const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+                    const imgurResponse = await fetch('https://api.imgur.com/3/image', {
                         method: 'POST',
-                        headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-                        body: form
+                        headers: {
+                            'Authorization': `Client-ID ${IMGUR_CLIENT_ID}`
+                        },
+                        body: imgurFormData
                     });
                     
-                    if (!uploadResponse.ok) {
-                        throw new Error('画像のアップロードに失敗しました');
+                    if (!imgurResponse.ok) {
+                        const errorData = await imgurResponse.json();
+                        throw new Error(`画像のアップロードに失敗: ${errorData.data?.error || 'Unknown error'}`);
                     }
                     
-                    const uploadResult = await uploadResponse.json();
-                    const fileId = uploadResult.id;
+                    const imgurResult = await imgurResponse.json();
+                    const imageUrl = imgurResult.data.link;
+                    imageUrls.push(imageUrl);
                     
-                    // 公開URLを取得（認証付き）
-                    const imageUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&access_token=${accessToken}`;
+                    showMessage(`⏳ 画像 ${i + 1}/${state.formData.images.length} をアップロード中...`, 'success');
+                }
+                
+                // Instagram Graph APIでメディアコンテナを作成
+                const mediaIds = [];
+                
+                for (let i = 0; i < imageUrls.length; i++) {
+                    const imageUrl = imageUrls[i];
                     
-                    // Instagram Graph APIでメディアコンテナを作成
                     const containerUrl = state.formData.images.length === 1
                         ? `https://graph.facebook.com/v18.0/${INSTAGRAM_ACCOUNT_ID}/media?image_url=${encodeURIComponent(imageUrl)}&caption=${encodeURIComponent(fullCaption)}&access_token=${INSTAGRAM_ACCESS_TOKEN}`
                         : `https://graph.facebook.com/v18.0/${INSTAGRAM_ACCOUNT_ID}/media?image_url=${encodeURIComponent(imageUrl)}&is_carousel_item=true&access_token=${INSTAGRAM_ACCESS_TOKEN}`;
@@ -1298,9 +1302,9 @@
                     
                     const containerResult = await containerResponse.json();
                     mediaIds.push(containerResult.id);
-                    
-                    showMessage(`⏳ 画像 ${i + 1}/${state.formData.images.length} をアップロード中...`, 'success');
                 }
+                
+                showMessage('⏳ 投稿を公開中...', 'success');
                 
                 // 投稿を公開
                 let publishUrl;
@@ -1334,8 +1338,11 @@
                 
             } catch (error) {
                 console.error('Instagram投稿エラー:', error);
-                console.error('エラー詳細:', error);
-                showMessage(`❌ Instagram投稿に失敗しました: ${error.message}`, 'error');
+                console.error('エラー詳細:', JSON.stringify(error, null, 2));
+                if (error.result) {
+                    console.error('API レスポンス:', error.result);
+                }
+                showMessage(`❌ Instagram投稿に失敗しました: ${error.message || error.toString() || 'Unknown error'}`, 'error');
             }
         }
     
