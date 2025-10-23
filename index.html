@@ -25,7 +25,7 @@
         const INSTAGRAM_APP_SECRET = '70c616003680a73af282234235c3b82d';
         const INSTAGRAM_ACCOUNT_ID = '17841404355630376';
         const INSTAGRAM_ACCESS_TOKEN = 'IGAA0amBSswAZABZAFM4dzRqY2NkRHI5RjBHVlFOTENyOHBuOVpxRDY2c2xDdXpSX3lxQ3k0WDVRQm9fb0V4UWhLeW5lajl5MlFlVUU4eWcxYTNVSVVQRldBUjQ3cDJIWmxPZA2hsbWZAGTHpCUDlac2pjbjh2UnBTbkgxM1k4ZA1JNYwZDZD';
-        const APP_VERSION = '2025/01/22 13:05';
+        const APP_VERSION = '2025/01/22 13:10';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1288,11 +1288,18 @@ async function postToInstagram() {
                         ? `https://graph.facebook.com/v18.0/${INSTAGRAM_ACCOUNT_ID}/media?image_url=${encodeURIComponent(imageUrl)}&caption=${encodeURIComponent(fullCaption)}&access_token=${INSTAGRAM_ACCESS_TOKEN}`
                         : `https://graph.facebook.com/v18.0/${INSTAGRAM_ACCOUNT_ID}/media?image_url=${encodeURIComponent(imageUrl)}&is_carousel_item=true&access_token=${INSTAGRAM_ACCESS_TOKEN}`;
                     
+                    console.log('📝 リクエストURL:', containerUrl);
+                    console.log('📝 アカウントID:', INSTAGRAM_ACCOUNT_ID);
+                    console.log('📝 トークン（最初の20文字）:', INSTAGRAM_ACCESS_TOKEN.substring(0, 20));
+                    
                     const containerResponse = await fetch(containerUrl, { method: 'POST' });
+                    
+                    console.log('📝 レスポンスステータス:', containerResponse.status);
                     
                     if (!containerResponse.ok) {
                         const errorData = await containerResponse.json();
-                        throw new Error(`メディアコンテナの作成に失敗: ${errorData.error?.message || 'Unknown error'}`);
+                        console.error('📝 エラーレスポンス:', errorData);
+                        throw new Error(`メディアコンテナの作成に失敗: ${JSON.stringify(errorData.error || errorData)}`);
                     }
                     
                     const containerResult = await containerResponse.json();
