@@ -77,8 +77,12 @@
                     showMessage(`動画ファイル「${productNumber}.mp4」が見つかりませんでした`, 'error');
                 }
             } catch (error) {
-                console.error('動画検索エラー:', error);
-                showMessage('動画の検索に失敗しました', 'error');
+                console.error('Instagram投稿エラー:', error);
+                console.error('エラー詳細:', JSON.stringify(error, null, 2));
+                if (error.result) {
+                    console.error('API レスポンス:', error.result);
+                }
+                showMessage(`❌ Instagram投稿に失敗しました: ${error.message || error.toString() || 'Unknown error'}`, 'error');
             }
         }
 
