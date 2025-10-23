@@ -1275,8 +1275,12 @@ async function postToInstagram() {
                     const imageUrl = cloudinaryResult.secure_url;
                     imageUrls.push(imageUrl);
                     
+                    console.log(`✅ 画像 ${i + 1} アップロード成功:`, imageUrl);
                     showMessage(`⏳ 画像 ${i + 1}/${state.formData.images.length} をアップロード中...`, 'success');
                 }
+                
+                console.log('✅ 全画像アップロード完了。Instagram APIへ送信開始...');
+                console.log('📝 画像URLs:', imageUrls);
                 
                 // Instagram Graph APIでメディアコンテナを作成
                 const mediaIds = [];
