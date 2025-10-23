@@ -1281,18 +1281,8 @@
                     const uploadResult = await uploadResponse.json();
                     const fileId = uploadResult.id;
                     
-                    // Google DriveのファイルをPublicにする
-                    await gapi.client.drive.permissions.create({
-                        fileId: fileId,
-                        supportsAllDrives: true,
-                        resource: {
-                            role: 'reader',
-                            type: 'anyone'
-                        }
-                    });
-                    
-                    // 公開URLを取得
-                    const imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+                    // 公開URLを取得（認証付き）
+                    const imageUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&access_token=${accessToken}`;
                     
                     // Instagram Graph APIでメディアコンテナを作成
                     const containerUrl = state.formData.images.length === 1
