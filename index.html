@@ -21,6 +21,10 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
+        const INSTAGRAM_APP_ID = '3688415181455366';
+        const INSTAGRAM_APP_SECRET = '70c616003680a73af282234235c3b82d';
+        const INSTAGRAM_ACCOUNT_ID = '17841404355630376';
+        const INSTAGRAM_ACCESS_TOKEN = 'IGAA0amBSswAZABZAFFGS2Q2djVvWEJSSzJMOVJRaHVIOG1HNEgwRFFRclAydzRTMnhLcm41b3plWDBBQ0JYRm1yY1A0RjZAEeUJOUDBaQjRWTVdJOGttaWxYMkZAaQnhSMTI0MTYwbWVRbDlXZADl1Q1VXQ0pET3hkNURLUDhkbXJtZAwZDZD';
         const APP_VERSION = '2025/01/22 12:50';
 
         let gapiInited = false;
@@ -1199,6 +1203,147 @@
                 showMessage(`❌ X投稿に失敗しました: ${error.message}`, 'error');
             }
         }
+
+        async function postToInstagram() {
+            // チェック完了者がいるか確認
+            if (!state.formData.checks || state.formData.checks.length === 0) {
+                showMessage('❌ 投稿前にチェックを完了してください', 'error');
+                return;
+            }
+            
+            // 画像が必須（Instagramはテキストのみ投稿不可）
+            if (!state.formData.images || state.formData.images.length === 0) {
+                showMessage('❌ Instagramには画像が必須です', 'error');
+                return;
+            }
+            
+            // 投稿内容を準備
+            const caption = state.formData.text || '';
+            
+            // リンクを追加
+            const links = (state.formData.links || []).filter(l => l.trim());
+            let fullCaption = caption;
+            if (links.length > 0) {
+                fullCaption += '\n\n' + links.join('\n');
+            }
+            
+            // 2200文字制限チェック
+            if (fullCaption.length > 2200) {
+                showMessage(`❌ キャプションが長すぎます（${fullCaption.length}/2200文字）`, 'error');
+                return;
+            }
+            
+            // 確認ダイアログ
+            const previewText = fullCaption.length > 100 ? fullCaption.substring(0, 100) + '...' : fullCaption;
+            const mediaText = `\n📷 画像: ${state.formData.images.length}個`;
+            
+            if (!confirm(`以下の内容でInstagramに投稿します。よろしいですか？\n\n${previewText}${mediaText}`)) {
+                return;
+            }
+            
+            try {
+                showMessage('⏳ Instagramに投稿中...', 'success');
+                
+                // 画像を1枚ずつアップロード
+                const mediaIds = [];
+                
+                for (let i = 0; i < state.formData.images.length; i++) {
+                    const image = state.formData.images[i];
+                    
+                    // Base64からBlobに変換
+                    const response = await fetch(image.data);
+                    const blob = await response.blob();
+                    
+                    // 一時的にGoogle Driveにアップロード
+                    const metadata = {
+                        name: `temp_instagram_${Date.now()}_${i}.jpg`,
+                        parents: [VIDEO_FOLDER_ID]
+                    };
+                    
+                    const form = new FormData();
+                    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+                    form.append('file', blob);
+                    
+                    const uploadResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true', {
+                        method: 'POST',
+                        headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+                        body: form
+                    });
+                    
+                    if (!uploadResponse.ok) {
+                        throw new Error('画像のアップロードに失敗しました');
+                    }
+                    
+                    const uploadResult = await uploadResponse.json();
+                    const fileId = uploadResult.id;
+                    
+                    // Google DriveのファイルをPublicにする
+                    await gapi.client.drive.permissions.create({
+                        fileId: fileId,
+                        supportsAllDrives: true,
+                        resource: {
+                            role: 'reader',
+                            type: 'anyone'
+                        }
+                    });
+                    
+                    // 公開URLを取得
+                    const imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+                    
+                    // Instagram Graph APIでメディアコンテナを作成
+                    const containerUrl = state.formData.images.length === 1
+                        ? `https://graph.facebook.com/v18.0/${INSTAGRAM_ACCOUNT_ID}/media?image_url=${encodeURIComponent(imageUrl)}&caption=${encodeURIComponent(fullCaption)}&access_token=${INSTAGRAM_ACCESS_TOKEN}`
+                        : `https://graph.facebook.com/v18.0/${INSTAGRAM_ACCOUNT_ID}/media?image_url=${encodeURIComponent(imageUrl)}&is_carousel_item=true&access_token=${INSTAGRAM_ACCESS_TOKEN}`;
+                    
+                    const containerResponse = await fetch(containerUrl, { method: 'POST' });
+                    
+                    if (!containerResponse.ok) {
+                        const errorData = await containerResponse.json();
+                        throw new Error(`メディアコンテナの作成に失敗: ${errorData.error?.message || 'Unknown error'}`);
+                    }
+                    
+                    const containerResult = await containerResponse.json();
+                    mediaIds.push(containerResult.id);
+                    
+                    showMessage(`⏳ 画像 ${i + 1}/${state.formData.images.length} をアップロード中...`, 'success');
+                }
+                
+                // 投稿を公開
+                let publishUrl;
+                if (state.formData.images.length === 1) {
+                    // 単一画像投稿
+                    publishUrl = `https://graph.facebook.com/v18.0/${INSTAGRAM_ACCOUNT_ID}/media_publish?creation_id=${mediaIds[0]}&access_token=${INSTAGRAM_ACCESS_TOKEN}`;
+                } else {
+                    // カルーセル投稿
+                    const carouselUrl = `https://graph.facebook.com/v18.0/${INSTAGRAM_ACCOUNT_ID}/media?media_type=CAROUSEL&children=${mediaIds.join(',')}&caption=${encodeURIComponent(fullCaption)}&access_token=${INSTAGRAM_ACCESS_TOKEN}`;
+                    const carouselResponse = await fetch(carouselUrl, { method: 'POST' });
+                    
+                    if (!carouselResponse.ok) {
+                        const errorData = await carouselResponse.json();
+                        throw new Error(`カルーセルの作成に失敗: ${errorData.error?.message || 'Unknown error'}`);
+                    }
+                    
+                    const carouselResult = await carouselResponse.json();
+                    publishUrl = `https://graph.facebook.com/v18.0/${INSTAGRAM_ACCOUNT_ID}/media_publish?creation_id=${carouselResult.id}&access_token=${INSTAGRAM_ACCESS_TOKEN}`;
+                }
+                
+                const publishResponse = await fetch(publishUrl, { method: 'POST' });
+                
+                if (!publishResponse.ok) {
+                    const errorData = await publishResponse.json();
+                    throw new Error(`投稿の公開に失敗: ${errorData.error?.message || 'Unknown error'}`);
+                }
+                
+                const publishResult = await publishResponse.json();
+                
+                showMessage('✅ Instagramに投稿しました！', 'success');
+                
+            } catch (error) {
+                console.error('Instagram投稿エラー:', error);
+                console.error('エラー詳細:', error);
+                showMessage(`❌ Instagram投稿に失敗しました: ${error.message}`, 'error');
+            }
+        }
     
       function render() {
             const { daysInMonth, startingDayOfWeek } = getDaysInMonth(state.currentDate);
@@ -1379,6 +1524,7 @@
                                 </button>
                             </div>
                             ${platforms.includes('x') ? '<div class="pt-2"><button onclick="postToX()" class="w-full bg-black hover:bg-gray-800 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm">𝕏 に投稿</button></div>' : ''}
+                            ${platforms.includes('instagram') ? '<div class="pt-2"><button onclick="postToInstagram()" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm">Instagram に投稿</button></div>' : ''}
                         </div>
                     </div>`;
                 } else {
