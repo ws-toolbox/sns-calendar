@@ -324,14 +324,21 @@
                     });
                     state.isSignedIn = true;
                     
-                    // ユーザー情報を取得
-                    await getUserInfo();
+                    // ユーザー情報を取得（トークンが有効な場合のみ）
+                    try {
+                        await getUserInfo();
+                    } catch (error) {
+                        // ユーザー情報の取得に失敗しても処理を続行
+                    }
                     
                     await loadFromDrive();
                     render();
                 } catch (error) {
-                    console.log('Saved token expired');
+                    // トークン期限切れ
                     localStorage.removeItem('google_access_token');
+                    accessToken = null;
+                    state.isSignedIn = false;
+                    state.userName = null;
                     render();
                 }
             } else {
