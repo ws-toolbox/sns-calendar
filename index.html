@@ -297,8 +297,12 @@
                 state.isSignedIn = true;
                 localStorage.setItem('google_access_token', JSON.stringify(gapi.client.getToken()));
                 
-                // ユーザー情報を取得
-                await getUserInfo();
+                // ユーザー情報を取得（トークンが有効な場合のみ）
+                try {
+                    await getUserInfo();
+                } catch (error) {
+                    // ユーザー情報の取得に失敗しても処理を続行
+                }
                 
                 await loadFromDrive();
                 render();
