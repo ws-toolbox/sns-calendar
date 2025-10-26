@@ -514,8 +514,7 @@
         }
 
         async function checkForUpdates() {
-            // トークンの有効性をチェック
-            await refreshTokenIfNeeded();
+            if (!state.isSignedIn || !state.folderId) return;
             
             try {
                 const currentYear = state.currentDate.getFullYear();
