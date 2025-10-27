@@ -48,6 +48,28 @@
             formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: []}
         };
 
+        // URLパラメータを取得
+        function getUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                date: params.get('date'),
+                post: params.get('post') ? parseInt(params.get('post')) : null
+            };
+        }
+
+        // URLパラメータを設定
+        function setUrlParams(date, postId) {
+            const url = new URL(window.location);
+            if (date && postId) {
+                url.searchParams.set('date', date);
+                url.searchParams.set('post', postId);
+            } else {
+                url.searchParams.delete('date');
+                url.searchParams.delete('post');
+            }
+            window.history.pushState({}, '', url);
+        }
+        
         async function findAndDownloadVideo(productNumber) {
             if (!state.isSignedIn || !productNumber) {
                 showMessage('商品番号が入力されていません', 'error');
@@ -496,8 +518,14 @@
                         state.lastUpdated = serverModifiedTime; // modifiedTimeを使用
                         console.log(`✅ ${currentYear}年のデータ読み込み成功`);
                         showMessage(`${currentYear}年のデータを読み込みました`, 'success');
+                    
+                    // URLパラメータから投稿を開く
+                    const urlParams = getUrlParams();
+                    if (urlParams.date && urlParams.post) {
+                        openEditForm(new Date(urlParams.date).getDate(), urlParams.post);
                     }
-                } else {
+                }
+            } else {
                     // JSONファイルが見つからない場合は空のデータで開始
                     console.log(`📝 ${currentYear}年のJSONファイルが見つかりません。`);
                     state.posts = {};
@@ -827,6 +855,7 @@
             state.editingPostId = null;
             state.viewMode = 'edit';
             state.formData = {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: []};
+            setUrlParams(null, null);
         }
 
         function confirmDelete(dateStr, postId) {
@@ -913,6 +942,14 @@
                 state.editingPostId = null;
                 state.viewMode = 'edit';
             }
+            
+            // URLを更新
+            if (postId) {
+                setUrlParams(dateStr, postId);
+            } else {
+                setUrlParams(null, null);
+            }
+            
             render();
         }
 
@@ -1555,8 +1592,13 @@ async function postToInstagram() {
                                     🗑
                                 </button>
                             </div>
+                            <div class="pt-2">
+                                <button onclick="copyToClipboard(window.location.origin + window.location.pathname + '?date=${state.selectedDate}&post=${state.editingPostId}')" class="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 py-2 rounded-lg font-semibold transition-colors text-sm">
+                                    🔗 この投稿のリンクをコピー
+                                </button>
+                            </div>
                             ${platforms.includes('x') ? '<div class="pt-2"><button onclick="postToX()" class="w-full bg-black hover:bg-gray-800 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm">𝕏 に投稿</button></div>' : ''}
-                            ${platforms.includes('instagram') ? '<div class="pt-2"><button onclick="postToInstagram()" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm">Instagram に投稿（テスト前）</button></div>' : ''}
+                            ${platforms.includes('instagram') ? '<div class="pt-2"><button onclick="postToInstagram()" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm">Instagram に投稿</button></div>' : ''}
                         </div>
                     </div>`;
                 } else {
