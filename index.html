@@ -25,7 +25,7 @@
         const INSTAGRAM_APP_SECRET = '70c616003680a73af282234235c3b82d';
         const INSTAGRAM_ACCOUNT_ID = '17841404355630376';
         const INSTAGRAM_ACCESS_TOKEN = 'EAAQVzgup6V8BP3Y4hwDOVEm2hM0bORhqiZAJN6u4RQ169IfkJ1AoNtOVFK8JhpDsgyLKrvIqfi8F50OFGPUDnayrHbDDnSmZCgS51MV9hLWRjiJuyjIW9EjZCO3XFI4GtZCm5kZAj3I7PrY4BZCnbD1udd9vBcfyyrGgHh45nVyCLVAZBv0Dx5BXirqUW6PiI6YCVvKwFSjOECBs2gYwRVfyKIUjll4FJ7yUPZAsIqZCZB4q1ztwc0HHztqBZC6teB0pAZDZD';
-        const APP_VERSION = '2025/01/22 13:35';
+        const APP_VERSION = '2025/01/22 13:40';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1604,8 +1604,13 @@ async function postToInstagram() {
                                     🗑
                                 </button>
                             </div>
-                            ${platforms.includes('x') ? '<div class="pt-2"><button onclick="postToX()" class="w-full bg-black hover:bg-gray-800 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm">𝕏 に投稿</button></div>' : ''}
-                            ${platforms.includes('instagram') ? '<div class="pt-2"><button onclick="postToInstagram()" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm">Instagram に投稿</button></div>' : ''}
+                            ${platforms.includes('x') || platforms.includes('instagram') ? `
+                                <div class="mt-6 pt-4 border-t border-gray-200">
+                                    <div class="text-xs font-semibold text-gray-500 mb-2">SNS投稿</div>
+                                    ${platforms.includes('x') ? '<button onclick="postToX()" class="w-full bg-black hover:bg-gray-800 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm mb-2">𝕏 に投稿</button>' : ''}
+                                    ${platforms.includes('instagram') ? '<button onclick="postToInstagram()" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white py-2 rounded-lg font-semibold transition-colors shadow-md text-sm">Instagram に投稿</button>' : ''}
+                                </div>
+                            ` : ''}
                         </div>
                     </div>`;
                 } else {
@@ -1661,7 +1666,7 @@ async function postToInstagram() {
                                     placeholder="投稿する文章を入力..." 
                                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" 
                                     rows="4"
-                                    style="min-height: 100px; resize: vertical;"
+                                    style="min-height: 100px; resize: vertical; overflow: hidden;"
                                 >${state.formData.text}</textarea>
                             </div>
                             <div>
@@ -1754,7 +1759,7 @@ async function postToInstagram() {
             document.getElementById('app').innerHTML = `
                 <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center gap-3">
-                        <h1 class="text-3xl font-bold text-gray-800">📱 SNS投稿カレンダー</h1>
+                        <a href="https://ws-toolbox.github.io/sns-calendar/" class="text-3xl font-bold text-gray-800 hover:text-blue-600 transition-colors no-underline">📱 SNS投稿カレンダー</a>
                         <button onclick="exportToSpreadsheet()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg transition-colors text-xs flex items-center gap-1">
                             📊 スプレッドシート同期
                         </button>
