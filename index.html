@@ -25,7 +25,7 @@
         const INSTAGRAM_APP_SECRET = '70c616003680a73af282234235c3b82d';
         const INSTAGRAM_ACCOUNT_ID = '17841404355630376';
         const INSTAGRAM_ACCESS_TOKEN = 'EAAQVzgup6V8BP3Y4hwDOVEm2hM0bORhqiZAJN6u4RQ169IfkJ1AoNtOVFK8JhpDsgyLKrvIqfi8F50OFGPUDnayrHbDDnSmZCgS51MV9hLWRjiJuyjIW9EjZCO3XFI4GtZCm5kZAj3I7PrY4BZCnbD1udd9vBcfyyrGgHh45nVyCLVAZBv0Dx5BXirqUW6PiI6YCVvKwFSjOECBs2gYwRVfyKIUjll4FJ7yUPZAsIqZCZB4q1ztwc0HHztqBZC6teB0pAZDZD';
-        const APP_VERSION = '2025/01/22 14:05';
+        const APP_VERSION = '2025/01/22 14:10';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1445,16 +1445,8 @@ async function postToInstagram() {
 
         async function sendSlackNotification() {
             try {
-                // Webhook URLを読み込み
-                const webhookUrl = await loadSlackWebhook();
-                
-                console.log('📝 読み込まれたWebhook URL:', webhookUrl);
-                console.log('📝 URL の長さ:', webhookUrl ? webhookUrl.length : 0);
-                
-                if (!webhookUrl) {
-                    showMessage('❌ Slack Webhook URLが設定されていません', 'error');
-                    return;
-                }
+                // Google Apps Script のプロキシURLを使用
+                const webhookUrl = 'https://script.google.com/macros/s/AKfycbzbTOXOBT4y0q8eKHqvUA5-himbu_NsG_RHMMh-t0fIBgwv8Y_NtPARKryAYt1dmUYveQ/exec';
                 
                 const postUrl = window.location.origin + window.location.pathname + '?date=' + state.selectedDate + '&post=' + state.editingPostId;
                 const post = state.posts[state.selectedDate]?.find(p => p.id === state.editingPostId);
