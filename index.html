@@ -1528,7 +1528,6 @@ async function postToInstagram() {
                 // 曜日を計算（0=日曜, 6=土曜）
                 const currentDayOfWeek = new Date(state.currentDate.getFullYear(), state.currentDate.getMonth(), day).getDay();
                 const dayColor = currentDayOfWeek === 0 ? 'text-red-600' : (currentDayOfWeek === 6 ? 'text-blue-600' : 'text-gray-700');
-                const dayColor = isToday ? 'text-red-600 font-bold' : (isCurrentMonth ? 'text-gray-700' : 'text-gray-400');
                 const todayBorder = isToday ? 'border-red-500 border-2 bg-red-50' : '';
             
                 const disabledClass = state.isSignedIn ? '' : 'opacity-50 cursor-not-allowed';
