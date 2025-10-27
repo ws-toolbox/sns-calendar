@@ -25,7 +25,7 @@
         const INSTAGRAM_APP_SECRET = '70c616003680a73af282234235c3b82d';
         const INSTAGRAM_ACCOUNT_ID = '17841404355630376';
         const INSTAGRAM_ACCESS_TOKEN = 'EAAQVzgup6V8BP3Y4hwDOVEm2hM0bORhqiZAJN6u4RQ169IfkJ1AoNtOVFK8JhpDsgyLKrvIqfi8F50OFGPUDnayrHbDDnSmZCgS51MV9hLWRjiJuyjIW9EjZCO3XFI4GtZCm5kZAj3I7PrY4BZCnbD1udd9vBcfyyrGgHh45nVyCLVAZBv0Dx5BXirqUW6PiI6YCVvKwFSjOECBs2gYwRVfyKIUjll4FJ7yUPZAsIqZCZB4q1ztwc0HHztqBZC6teB0pAZDZD';
-        const APP_VERSION = '2025/01/22 13:50';
+        const APP_VERSION = '2025/01/22 13:55';
 
         let gapiInited = false;
         let gisInited = false;
@@ -483,6 +483,35 @@
             } catch (error) {
                 console.error('❌ 共有ドライブ読み込みエラー:', error);
                 showMessage('エラー: ' + (error.result?.error?.message || error.message), 'error');
+            }
+        }
+
+        async function loadSlackWebhook() {
+            try {
+                const response = await gapi.client.drive.files.list({
+                    q: `name='slack_webhook.txt' and '${state.folderId}' in parents and trashed=false`,
+                    fields: 'files(id, name)',
+                    spaces: 'drive',
+                    supportsAllDrives: true,
+                    includeItemsFromAllDrives: true
+                });
+
+                if (response.result.files && response.result.files.length > 0) {
+                    const fileId = response.result.files[0].id;
+                    const content = await gapi.client.drive.files.get({
+                        fileId: fileId,
+                        alt: 'media',
+                        supportsAllDrives: true
+                    });
+                    
+                    return content.body.trim();
+                } else {
+                    console.warn('slack_webhook.txt が見つかりません');
+                    return null;
+                }
+            } catch (error) {
+                console.error('Webhook URL読み込みエラー:', error);
+                return null;
             }
         }
         
@@ -1413,6 +1442,50 @@ async function postToInstagram() {
                 showMessage(`❌ Instagram投稿に失敗しました: ${error.message || error.toString() || 'Unknown error'}`, 'error');
             }
         }
+
+        async function sendSlackNotification() {
+            try {
+                // Webhook URLを読み込み
+                const webhookUrl = await loadSlackWebhook();
+                
+                if (!webhookUrl) {
+                    showMessage('❌ Slack Webhook URLが設定されていません', 'error');
+                    return;
+                }
+                
+                const postUrl = window.location.origin + window.location.pathname + '?date=' + state.selectedDate + '&post=' + state.editingPostId;
+                const post = state.posts[state.selectedDate]?.find(p => p.id === state.editingPostId);
+                const title = post?.title || '投稿';
+                const dateStr = state.selectedDate;
+                
+                const payload = {
+                    username: 'SNS確認依頼　通知',
+                    channel: '#req-sns依頼',
+                    attachments: [{
+                        color: '#36a64f',
+                        title: '【依頼】　今週のSNS投稿です！ご確認お願いします！',
+                        text: `投稿日: ${dateStr}\n投稿タイトル: ${title}\nリンク: ${postUrl}\n\n<@U9JD6KPFH> <@U9GLMKRC0> <@U9GSE5ELV> <@U9KFDH1AT>`
+                    }]
+                };
+                
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (response.ok) {
+                    showMessage('✅ Slackに確認依頼を送信しました', 'success');
+                } else {
+                    throw new Error('Slack通知の送信に失敗しました');
+                }
+            } catch (error) {
+                console.error('Slack通知エラー:', error);
+                showMessage('❌ Slack通知の送信に失敗しました: ' + error.message, 'error');
+            }
+        }
     
       function render() {
             const { daysInMonth, startingDayOfWeek } = getDaysInMonth(state.currentDate);
@@ -1504,6 +1577,11 @@ async function postToInstagram() {
                                 </div>
                             </div>
                             <div class="flex items-center gap-2">
+                                <button onclick="sendSlackNotification()" class="p-2 hover:bg-purple-50 rounded-lg transition-colors" title="Slackに確認依頼を送信">
+                                    <svg class="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/>
+                                    </svg>
+                                </button>
                                 <button onclick="copyToClipboard(window.location.origin + window.location.pathname + '?date=${state.selectedDate}&post=${state.editingPostId}')" class="p-2 hover:bg-blue-50 rounded-lg transition-colors" title="この投稿のリンクをコピー">
                                     <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
