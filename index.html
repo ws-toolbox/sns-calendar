@@ -1450,13 +1450,23 @@ async function postToInstagram() {
                 const title = post?.title || '投稿';
                 const dateStr = state.selectedDate;
                 
+                // 投稿先SNSを取得
+                const platforms = post?.platforms || [post?.platform] || [];
+                const platformNames = {
+                    'x': '𝕏 (Twitter)',
+                    'instagram': 'Instagram',
+                    'facebook': 'Facebook',
+                    'threads': 'Threads'
+                };
+                const platformList = platforms.map(p => platformNames[p] || p).join(', ') || '未設定';
+                
                 const payload = {
                     username: 'SNS確認依頼　通知',
                     channel: '#req-sns依頼',
                     attachments: [{
                         color: '#36a64f',
                         title: '【依頼】　今週のSNS投稿です！ご確認お願いします！',
-                        text: `投稿日: ${dateStr}\n投稿タイトル: ${title}\nリンク: ${postUrl}\n\n<@U9JD6KPFH> <@U9GLMKRC0> <@U9GSE5ELV> <@U9KFDH1AT>`
+                        text: `投稿日: ${dateStr}\n投稿タイトル: ${title}\n投稿先: ${platformList}\nリンク: ${postUrl}\n\n<@U9JD6KPFH> <@U9GLMKRC0> <@U9GSE5ELV> <@U9KFDH1AT>`
                     }]
                 };
                 
@@ -1518,7 +1528,8 @@ async function postToInstagram() {
                 // 曜日を計算（0=日曜, 6=土曜）
                 const currentDayOfWeek = new Date(state.currentDate.getFullYear(), state.currentDate.getMonth(), day).getDay();
                 const dayColor = currentDayOfWeek === 0 ? 'text-red-600' : (currentDayOfWeek === 6 ? 'text-blue-600' : 'text-gray-700');
-                const todayBorder = isToday ? 'border-blue-400 bg-blue-50' : 'border-gray-200';
+                const dayColor = isToday ? 'text-red-600 font-bold' : (isCurrentMonth ? 'text-gray-700' : 'text-gray-400');
+                const todayBorder = isToday ? 'border-red-500 border-2 bg-red-50' : '';
             
                 const disabledClass = state.isSignedIn ? '' : 'opacity-50 cursor-not-allowed';
                 const hoverClass = state.isSignedIn ? 'hover:border-blue-200' : '';
