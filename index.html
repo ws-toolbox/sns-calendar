@@ -1582,7 +1582,7 @@ async function postToInstagram() {
                                     }).join('')}
                                 </div>
                             ` : ''}
-                            <button ${state.isSignedIn ? `onclick="openEditForm(${day})"` : `onclick="showMessage('先にGoogle Driveに接続してください', 'error')"`}
+                            <button ${state.isSignedIn ? `onclick="openEditForm(${day})"` : `onclick="showMessage('先にGoogle Driveに接続してください', 'error')"`} class="w-full text-[11px] ${state.isSignedIn ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-50 cursor-pointer' : 'text-gray-300 cursor-not-allowed'} py-1 flex items-center justify-center gap-1 rounded transition-colors">
                                 <span>+</span> 追加
                             </button>
                         </div>
