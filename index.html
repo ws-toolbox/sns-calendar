@@ -1607,7 +1607,7 @@ async function postToInstagram() {
                                 <div class="flex gap-1 flex-wrap">
                                     ${platforms.map(p => {
                                         const badge = platformBadges[p] || { icon: '?', label: p, color: 'bg-gray-500' };
-                                        return `<span class="${badge.color} text-white px-2 py-1 rounded text-sm">${badge.label}</span>`;
+                                        return `<span class="${badge.color} text-white px-2 py-1 rounded text-sm">${badge.icon}</span>`;
                                     }).join('')}
                                 </div>
                             </div>
