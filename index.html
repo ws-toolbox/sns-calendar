@@ -1498,11 +1498,11 @@ async function postToInstagram() {
       function render() {
             const platformBadges = {
                 'x': { icon: '𝕏', label: '𝕏', color: 'bg-black' },
-                'instagram': { icon: '📷', label: 'Instagram', color: 'bg-gradient-to-r from-purple-500 to-pink-500' },
-                'facebook': { icon: 'f', label: 'Facebook', color: 'bg-blue-600' },
-                'threads': { icon: '@', label: 'Threads', color: 'bg-black' },
-                'line': { icon: 'LINE', label: 'LINE', color: 'bg-green-500' },
-                'stumaga': { icon: 'スタ', label: 'スタマガ', color: 'bg-orange-500' },
+                'instagram': { icon: 'IG', label: 'Instagram', color: 'bg-gradient-to-r from-purple-500 to-pink-500' },
+                'facebook': { icon: 'FB', label: 'Facebook', color: 'bg-blue-600' },
+                'threads': { icon: 'Th', label: 'Threads', color: 'bg-black' },
+                'line': { icon: 'L', label: 'LINE', color: 'bg-green-500' },
+                'stumaga': { icon: 'M', label: 'スタマガ', color: 'bg-orange-500' },
                 'youtube': { icon: 'YT', label: 'YouTube', color: 'bg-red-600' }
             };
             
@@ -1570,16 +1570,13 @@ async function postToInstagram() {
                                         const isActive = selectedDay === day && state.editingPostId === post.id;
                                         const activeClass = isActive ? 'border-blue-500 border-2 bg-blue-50 shadow-md' : 'border-gray-200';
                                         return `<div ${clickHandler} class="text-xs bg-white p-2 rounded border ${activeClass} ${postHoverClass} transition-all">
-                                            <div class="flex items-center justify-between gap-1">
-                                                <div class="flex items-center gap-1 flex-shrink-0">
-                                                    ${platforms.map(p => {
-                                                        const badge = platformBadges[p] || { icon: '?', label: p, color: 'bg-gray-500' };
-                                                        return `<span class="${badge.color} text-white px-1 py-0.5 rounded text-[10px]">${badge.icon}</span>`;
-                                                    }).join('')}
-                                                </div>
-                                                <div class="font-semibold line-clamp-1 text-[11px] flex-1 min-w-0">${post.title || '無題'}</div>
+                                            <div class="flex items-center gap-1 mb-1">
+                                                ${platforms.map(p => {
+                                                    const badge = platformBadges[p] || { icon: '?', label: p, color: 'bg-gray-500' };
+                                                    return `<span class="${badge.color} text-white px-1 py-0.5 rounded text-[10px]">${badge.icon}</span>`;
+                                                }).join('')}
                                             </div>
-                                            ${post.text ? `<div class="text-gray-600 line-clamp-2 mt-1 text-[10px]">${post.text}</div>` : ''}
+                                            <div class="font-semibold line-clamp-1">${post.title || '無題'}</div>
                                         </div>`;
                                     }).join('')}
                                 </div>
