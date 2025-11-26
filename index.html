@@ -1322,6 +1322,36 @@
                 showMessage('❌ Slack通知の送信に失敗しました: ' + error.message, 'error');
             }
         }
+
+        async function loadSlackWebhook() {
+            try {
+                const response = await gapi.client.drive.files.list({
+                    q: `name='slack_webhook.txt' and '${state.folderId}' in parents and trashed=false`,
+                    fields: 'files(id, name)',
+                    spaces: 'drive',
+                    supportsAllDrives: true,
+                    includeItemsFromAllDrives: true
+                });
+
+                if (response.result.files && response.result.files.length > 0) {
+                    const fileId = response.result.files[0].id;
+                    const content = await gapi.client.drive.files.get({
+                        fileId: fileId,
+                        alt: 'media',
+                        supportsAllDrives: true
+                    });
+                    
+                    return content.body.trim();
+                } else {
+                    console.warn('slack_webhook.txt が見つかりません');
+                    return null;
+                }
+            } catch (error) {
+                console.error('Webhook URL読み込みエラー:', error);
+                return null;
+            }
+        }
+
     
       function render() {
             const platformBadges = {
