@@ -21,7 +21,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/11/26 20:00';
+        const APP_VERSION = '2025/11/26 21:00';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1150,12 +1150,6 @@
                 fullText += '\n\n' + links.join('\n');
             }
             
-            // 280文字制限チェック
-            if (fullText.length > 280) {
-                showMessage(`❌ テキストが長すぎます（${fullText.length}/280文字）`, 'error');
-                return;
-            }
-            
             // 動画埋め込みの場合、DriveのファイルIDを取得
             let videoFileId = null;
             if (state.formData.embedProduct && state.formData.productNumber) {
@@ -1493,10 +1487,10 @@
                                     📋 テキストをコピー
                                 </button>
                             </div>
-                            ${state.formData.links && state.formData.links.length > 0 ? `
+                            ${state.formData.links && state.formData.links.filter(l => l && l.trim()).length > 0 ? `
                                 <div>
                                     <div class="space-y-1">
-                                        ${state.formData.links.map((link, index) => `
+                                        ${state.formData.links.filter(l => l && l.trim()).map((link, index) => `
                                             <div class="bg-blue-50 p-2 rounded-lg border border-blue-200 flex items-center gap-2">
                                                 <a href="${link}" target="_blank" class="text-blue-600 hover:text-blue-800 text-xs break-all flex-1">🔗 ${link}</a>
                                                 <button onclick="copyToClipboard(\`${link}\`)" class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs whitespace-nowrap">
