@@ -1300,6 +1300,10 @@
                     data: JSON.stringify(payload)
                 });
                 
+                const fullUrl = `${gasUrl}?${params.toString()}`;
+                console.log('📝 Slack送信URL:', fullUrl);
+                console.log('📝 URL長さ:', fullUrl.length);
+                
                 // iframeで送信（CORS回避）
                 const iframe = document.createElement('iframe');
                 iframe.style.display = 'none';
