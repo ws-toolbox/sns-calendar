@@ -21,7 +21,7 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/11/26 22:00';
+        const APP_VERSION = '2025/11/26 23:00';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1277,10 +1277,11 @@
                 // 投稿先SNSを取得
                 const platforms = post?.platforms || [post?.platform] || [];
                 const platformNames = {
-                    'x': '𝕏 (Twitter)',
+                    'x': '𝕏',
                     'instagram': 'Instagram',
-                    'facebook': 'Facebook',
-                    'threads': 'Threads'
+                    'line': 'LINE',
+                    'stumaga': 'スタマガ',
+                    'youtube': 'YouTube'
                 };
                 const platformList = platforms.map(p => platformNames[p] || p).join(', ') || '未設定';
                 
@@ -1294,31 +1295,28 @@
                     }]
                 };
                 
-                // GASにGETパラメータで送信
-                const gasUrl = 'https://script.google.com/macros/s/AKfycbwkvaWc3wSEsKpB8JicUn1KtmPWQnaiUwYYzpWEOleBoe7hsrBuBdIFYRAHYFPA0-_kcQ/exec';
-                const params = new URLSearchParams({
-                    data: JSON.stringify(payload)
+                // 直接Slack Webhook URLを呼び出す
+                const webhookUrl = 'https://hooks.slack.com/services/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';
+                
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
                 });
                 
-                const fullUrl = `${gasUrl}?${params.toString()}`;
-                console.log('📝 Slack送信URL:', fullUrl);
-                console.log('📝 URL長さ:', fullUrl.length);
+                console.log('Slackレスポンス:', response.status, response.statusText);
                 
-                // iframeで送信（CORS回避）
-                const iframe = document.createElement('iframe');
-                iframe.style.display = 'none';
-                iframe.src = `${gasUrl}?${params.toString()}`;
-                document.body.appendChild(iframe);
-                
-                // 2秒後にiframeを削除
-                setTimeout(() => {
-                    document.body.removeChild(iframe);
-                }, 2000);
-                
-                showMessage('✅ Slackに確認依頼を送信しました', 'success');
+                if (response.ok) {
+                    showMessage('✅ Slackに確認依頼を送信しました', 'success');
+                } else {
+                    const errorText = await response.text();
+                    console.error('Slackエラー:', errorText);
+                    showMessage('❌ Slack送信に失敗: ' + response.status, 'error');
+                }
                 
             } catch (error) {
                 console.error('Slack通知エラー:', error);
+                console.error('エラー名:', error.name);
+                console.error('エラーメッセージ:', error.message);
                 showMessage('❌ Slack通知の送信に失敗しました: ' + error.message, 'error');
             }
         }
