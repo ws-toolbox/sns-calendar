@@ -326,11 +326,8 @@
                 render();
             };
         
-            if (gapi.client.getToken() === null) {
-                tokenClient.requestAccessToken({prompt: 'consent'});
-            } else {
-                tokenClient.requestAccessToken({prompt: ''});
-            }
+            // 常にprompt: ''でポップアップを抑制
+            tokenClient.requestAccessToken({prompt: ''});
         }
 
         async function tryAutoSignIn() {
