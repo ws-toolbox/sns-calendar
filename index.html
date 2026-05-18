@@ -21,13 +21,18 @@
         const TARGET_FOLDER_ID = '1I23qmcfZ_x8c15NtW54vjhKQb7waJi-E';
         const SPREADSHEET_ID = '1QOwpEbvttoE51vjBNy79IEwPEUqAPBWMXYTB9on_NIw';
         const VIDEO_FOLDER_ID = '1085XOWlyw--O2ITRwS2kum2dXKZ8s87c';
-        const APP_VERSION = '2025/11/26 23:30';
+        const LOCAL_STORAGE_PREFIX = 'sns_calendar_cache_v1_';
+        const SAVE_DEBOUNCE_MS = 1500;
+        const POLL_INTERVAL_MS = 600000; // 10分
+        const APP_VERSION = '2026/05/18 12:30';
 
         let gapiInited = false;
         let gisInited = false;
         let tokenClient;
         let accessToken = null;
         let fileId = null;
+        let saveTimerId = null;
+        let pendingDirty = false;
 
         let state = {
             currentDate: new Date(),
@@ -37,12 +42,78 @@
             viewMode: 'edit',
             isSignedIn: false,
             isSaving: false,
+            isDriveLoading: false,
             folderId: null,
             lastUpdated: null,
+            lastSyncedModifiedTime: null,
             currentYear: new Date().getFullYear(),
             userName: null,
             formData: {title: '', platforms: [], text: '', images: [], checks: [], completedChecks: []}
         };
+
+        // ========== localStorage キャッシュ (年単位) ==========
+        function cacheKey(year) {
+            return `${LOCAL_STORAGE_PREFIX}${year}`;
+        }
+
+        function saveCurrentYearCache() {
+            try {
+                const year = state.currentDate.getFullYear();
+                localStorage.setItem(cacheKey(year), JSON.stringify({
+                    posts: state.posts,
+                    lastUpdated: state.lastUpdated
+                }));
+            } catch (e) {
+                console.error('localStorage 保存失敗:', e);
+            }
+        }
+
+        function loadYearCache(year) {
+            try {
+                const raw = localStorage.getItem(cacheKey(year));
+                if (!raw) return false;
+                const data = JSON.parse(raw);
+                state.posts = data.posts || {};
+                state.lastUpdated = data.lastUpdated || null;
+                return true;
+            } catch (e) {
+                console.error('localStorage 読み込み失敗:', e);
+                return false;
+            }
+        }
+
+        // ========== 保存スケジューリング (debounce) ==========
+        function persistState() {
+            saveCurrentYearCache();
+            scheduleSave();
+        }
+
+        function scheduleSave() {
+            if (!state.isSignedIn) {
+                pendingDirty = true;
+                return;
+            }
+            pendingDirty = true;
+            if (saveTimerId) clearTimeout(saveTimerId);
+            saveTimerId = setTimeout(() => {
+                saveTimerId = null;
+                if (state.isSaving) {
+                    scheduleSave();
+                    return;
+                }
+                saveToDrive();
+            }, SAVE_DEBOUNCE_MS);
+        }
+
+        // 離脱前に未同期の変更を flush (best effort)
+        window.addEventListener('beforeunload', () => {
+            if (pendingDirty && state.isSignedIn) {
+                try {
+                    if (saveTimerId) clearTimeout(saveTimerId);
+                    saveToDrive();
+                } catch (_) {}
+            }
+        });
 
         // URLパラメータを取得
         function getUrlParams() {
@@ -106,15 +177,23 @@
 
         async function changeMonth(offset) {
             const oldYear = state.currentDate.getFullYear();
+            // 現在の年のキャッシュを保存してから移動
+            if (pendingDirty) saveCurrentYearCache();
             state.currentDate.setMonth(state.currentDate.getMonth() + offset);
             const newYear = state.currentDate.getFullYear();
-            
-            // 年が変わった場合のみ再読み込み
+
             if (oldYear !== newYear && state.currentYear !== newYear) {
                 state.currentYear = newYear;
-                await loadYearData();
+                // まずキャッシュから即描画
+                if (loadYearCache(newYear)) {
+                    render();
+                }
+                // Drive 取得はバックグラウンド
+                if (state.isSignedIn) {
+                    loadYearData({ silent: true });
+                }
             }
-            
+
             render();
         }
         
@@ -314,53 +393,34 @@
                 accessToken = gapi.client.getToken().access_token;
                 state.isSignedIn = true;
                 localStorage.setItem('google_access_token', JSON.stringify(gapi.client.getToken()));
-                
-                // ユーザー情報を取得（トークンが有効な場合のみ）
-                try {
-                    await getUserInfo();
-                } catch (error) {
-                    // ユーザー情報の取得に失敗しても処理を続行
-                }
-                
-                await loadFromDrive();
                 render();
+                // ユーザー情報・Drive 読み込みはバックグラウンド
+                getUserInfo().catch(() => {}).finally(() => render());
+                loadFromDrive();
             };
-        
-            // 常にprompt: ''でポップアップを抑制
             tokenClient.requestAccessToken({prompt: ''});
         }
 
         async function tryAutoSignIn() {
             const savedToken = localStorage.getItem('google_access_token');
-            if (savedToken) {
-                try {
-                    const token = JSON.parse(savedToken);
-                    gapi.client.setToken(token);
-                    accessToken = token.access_token;
-                    await gapi.client.drive.files.list({
-                        pageSize: 1,
-                        supportsAllDrives: true
-                    });
-                    state.isSignedIn = true;
-                    
-                    // ユーザー情報を取得（トークンが有効な場合のみ）
-                    try {
-                        await getUserInfo();
-                    } catch (error) {
-                        // ユーザー情報の取得に失敗しても処理を続行
-                    }
-                    
-                    await loadFromDrive();
-                    render();
-                } catch (error) {
-                    // トークン期限切れ
-                    localStorage.removeItem('google_access_token');
-                    accessToken = null;
-                    state.isSignedIn = false;
-                    state.userName = null;
-                    render();
-                }
-            } else {
+            if (!savedToken) {
+                render();
+                return;
+            }
+            try {
+                const token = JSON.parse(savedToken);
+                gapi.client.setToken(token);
+                accessToken = token.access_token;
+                state.isSignedIn = true;
+                render();
+                // ユーザー情報・Drive 読み込みはバックグラウンド
+                getUserInfo().catch(() => {}).finally(() => render());
+                loadFromDrive();
+            } catch (error) {
+                localStorage.removeItem('google_access_token');
+                accessToken = null;
+                state.isSignedIn = false;
+                state.userName = null;
                 render();
             }
         }
@@ -405,9 +465,10 @@
 
         async function refreshTokenIfNeeded() {
             if (!state.isSignedIn) return;
-            
+            // 注: トークンの事前検証 API コールは削除しました（保存/取得時に 401 で検知）。
+            // 期限切れの場合のみ再認証フローを呼び出すように変更。
+            // この関数は互換性のため残しています（明示的に再認証したい場合に使用）。
             try {
-                // トークンの有効性をテスト
                 await gapi.client.drive.files.list({
                     pageSize: 1,
                     supportsAllDrives: true
@@ -436,11 +497,13 @@
             }
         }
 
-        async function loadFromDrive() {
+        async function loadFromDrive(options = {}) {
+            const { silent = true } = options;
+            if (state.isDriveLoading) return;
+            state.isDriveLoading = true;
+            render();
             try {
                 let folderId = null;
-                console.log('🔍 指定フォルダ内を検索開始...');
-                
                 const folderResponse = await gapi.client.drive.files.list({
                     q: `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false and '${TARGET_FOLDER_ID}' in parents`,
                     fields: 'files(id, name)',
@@ -450,41 +513,40 @@
                     corpora: 'drive',
                     driveId: SHARED_DRIVE_ID
                 });
-        
+
                 if (folderResponse.result.files && folderResponse.result.files.length > 0) {
                     folderId = folderResponse.result.files[0].id;
-                    console.log('✅ 指定フォルダ内でフォルダ発見');
-                    showMessage('指定フォルダ内のフォルダに接続しました', 'success');
+                    if (!silent) showMessage('指定フォルダ内のフォルダに接続しました', 'success');
                 } else {
-                    console.log('❌ フォルダが見つかりません');
                     showMessage('「SNS投稿管理」フォルダが見つかりません。管理者に連絡してください。', 'error');
-                    state.isSignedIn = false;
                     handleSignOut();
                     return;
                 }
-        
+
                 state.folderId = folderId;
-                state.currentYear = state.currentDate.getFullYear(); // この行を追加
-                
-                // 現在表示中の年のデータを読み込む
-                await loadYearData();
-                
-                // Twitter APIトークンを読み込む
-                // await loadTwitterTokens();
-                
-                console.log('✅ セットアップ完了');
+                state.currentYear = state.currentDate.getFullYear();
+                await loadYearData({ silent });
             } catch (error) {
-                console.error('❌ 共有ドライブ読み込みエラー:', error);
-                showMessage('エラー: ' + (error.result?.error?.message || error.message), 'error');
+                console.error('共有ドライブ読み込みエラー:', error);
+                if (error.status === 401 || error.result?.error?.code === 401) {
+                    showMessage('認証の有効期限が切れました。再ログインしてください。', 'error');
+                    handleSignOut();
+                } else {
+                    showMessage('エラー: ' + (error.result?.error?.message || error.message), 'error');
+                }
+            } finally {
+                state.isDriveLoading = false;
+                render();
             }
         }
 
-        async function loadYearData() {
+        async function loadYearData(options = {}) {
+            const { silent = false, force = false } = options;
             if (!state.folderId) return;
-            
+
             const currentYear = state.currentDate.getFullYear();
             const fileName = `sns_calendar_data_${currentYear}.json`;
-            
+
             try {
                 const response = await gapi.client.drive.files.list({
                     q: `name='${fileName}' and '${state.folderId}' in parents and trashed=false`,
@@ -493,54 +555,85 @@
                     supportsAllDrives: true,
                     includeItemsFromAllDrives: true
                 });
-        
+
                 const files = response.result.files;
                 if (files && files.length > 0) {
                     fileId = files[0].id;
-                    const serverModifiedTime = files[0].modifiedTime; // Driveのタイムスタンプを保存
-                    
-                    const fileContent = await gapi.client.drive.files.get({
-                        fileId: fileId,
-                        alt: 'media',
-                        supportsAllDrives: true
-                    });
-        
-                    if (fileContent.body) {
-                        const data = JSON.parse(fileContent.body);
-                        state.posts = data.posts || {};
-                        state.lastUpdated = serverModifiedTime; // modifiedTimeを使用
-                        console.log(`✅ ${currentYear}年のデータ読み込み成功`);
-                        showMessage(`${currentYear}年のデータを読み込みました`, 'success');
-                    
-                    // URLパラメータから投稿を開く
-                    const urlParams = getUrlParams();
-                    if (urlParams.date && urlParams.post) {
-                        openEditForm(new Date(urlParams.date).getDate(), urlParams.post);
+                    const serverModifiedTime = files[0].modifiedTime;
+
+                    // ローカルキャッシュより Drive が新しい場合のみ取得
+                    const localTime = state.lastUpdated ? new Date(state.lastUpdated).getTime() : 0;
+                    const serverTime = new Date(serverModifiedTime).getTime();
+                    const remoteIsNewer = serverTime - localTime > 1000;
+
+                    if (force || !state.lastUpdated || remoteIsNewer) {
+                        const fileContent = await gapi.client.drive.files.get({
+                            fileId: fileId,
+                            alt: 'media',
+                            supportsAllDrives: true
+                        });
+
+                        if (fileContent.body) {
+                            const data = JSON.parse(fileContent.body);
+                            // ローカルに未同期変更がある場合は確認
+                            if (pendingDirty && state.lastUpdated && !force) {
+                                const ok = confirm(
+                                    'ローカルに未同期の変更がありますが、リモートも更新されています。\n' +
+                                    `ローカル: ${formatDateTime(state.lastUpdated)}\n` +
+                                    `リモート: ${formatDateTime(serverModifiedTime)}\n\n` +
+                                    'OK = ローカル変更を保持してリモートに反映\n' +
+                                    'キャンセル = リモートを取得（ローカル変更は破棄）'
+                                );
+                                if (ok) {
+                                    state.lastSyncedModifiedTime = serverModifiedTime;
+                                    scheduleSave();
+                                    return;
+                                }
+                            }
+                            state.posts = data.posts || {};
+                            state.lastUpdated = serverModifiedTime;
+                            state.lastSyncedModifiedTime = serverModifiedTime;
+                            saveCurrentYearCache();
+                            if (!silent) showMessage(`${currentYear}年のデータを読み込みました`, 'success');
+
+                            const urlParams = getUrlParams();
+                            if (urlParams.date && urlParams.post) {
+                                openEditForm(new Date(urlParams.date).getDate(), urlParams.post);
+                            }
+                        }
+                    } else {
+                        // ローカルが最新 → そのまま使用、lastSyncedModifiedTime のみ更新
+                        state.lastSyncedModifiedTime = serverModifiedTime;
+                        if (pendingDirty) scheduleSave();
                     }
-                }
-            } else {
-                    // JSONファイルが見つからない場合は空のデータで開始
-                    console.log(`📝 ${currentYear}年のJSONファイルが見つかりません。`);
-                    state.posts = {};
-                    state.lastUpdated = null;
+                } else {
+                    // Drive にファイル無し
                     fileId = null;
-                    showMessage(`${currentYear}年の新規データを作成します`, 'success');
+                    state.lastSyncedModifiedTime = null;
+                    if (!state.lastUpdated) {
+                        state.posts = {};
+                        if (!silent) showMessage(`${currentYear}年の新規データを作成します`, 'success');
+                    } else if (pendingDirty) {
+                        // ローカル変更を Drive に保存
+                        scheduleSave();
+                    }
                 }
             } catch (error) {
                 console.error('年データ読み込みエラー:', error);
-                state.posts = {};
-                state.lastUpdated = null;
-                fileId = null;
+                if (error.status === 401 || error.result?.error?.code === 401) {
+                    showMessage('認証の有効期限が切れました。再ログインしてください。', 'error');
+                    handleSignOut();
+                }
             }
         }
 
         async function checkForUpdates() {
             if (!state.isSignedIn || !state.folderId) return;
-            
+
             try {
                 const currentYear = state.currentDate.getFullYear();
                 const fileName = `sns_calendar_data_${currentYear}.json`;
-                
+
                 const response = await gapi.client.drive.files.list({
                     q: `name='${fileName}' and '${state.folderId}' in parents and trashed=false`,
                     fields: 'files(id, modifiedTime)',
@@ -548,22 +641,22 @@
                     supportsAllDrives: true,
                     includeItemsFromAllDrives: true
                 });
-        
+
                 if (response.result.files && response.result.files.length > 0) {
-                    const serverModifiedTime = new Date(response.result.files[0].modifiedTime);
-                    const localModifiedTime = state.lastUpdated ? new Date(state.lastUpdated) : new Date(0);
-                    
-                    // 1秒以上の差がある場合のみ競合とみなす（自分の保存との誤判定を防ぐ）
-                    if (serverModifiedTime.getTime() - localModifiedTime.getTime() > 1000) {
+                    const serverModifiedTime = new Date(response.result.files[0].modifiedTime).getTime();
+                    const syncedTime = state.lastSyncedModifiedTime
+                        ? new Date(state.lastSyncedModifiedTime).getTime()
+                        : (state.lastUpdated ? new Date(state.lastUpdated).getTime() : 0);
+
+                    if (serverModifiedTime - syncedTime > 1000) {
                         if (confirm('他のユーザーがデータを更新しました。最新データを読み込みますか？\n\n※編集中の場合、編集内容は保持されます。')) {
                             const currentFormData = state.selectedDate ? {...state.formData} : null;
                             const currentEditingPostId = state.editingPostId;
                             const currentViewMode = state.viewMode;
                             const currentSelectedDate = state.selectedDate;
-                            
-                            await loadYearData();
-                            
-                            // 編集中だった場合、フォームデータを復元
+
+                            await loadYearData({ silent: false, force: true });
+
                             if (currentSelectedDate) {
                                 state.selectedDate = currentSelectedDate;
                                 state.editingPostId = currentEditingPostId;
@@ -572,9 +665,8 @@
                                     state.formData = currentFormData;
                                 }
                             }
-                            
+
                             render();
-                            showMessage('最新データを読み込みました', 'success');
                         }
                     }
                 }
@@ -585,60 +677,50 @@
         
         async function saveToDrive() {
             if (!state.isSignedIn || !state.folderId || state.isSaving) return;
-            
-            // トークンの有効性をチェック
-            await refreshTokenIfNeeded();
-            
+            if (!pendingDirty) return;
+
             state.isSaving = true;
             render();
-        
+
             try {
-                // 保存前に競合チェック
+                // 競合チェック: Drive 側の modifiedTime が自分の lastSyncedModifiedTime より新しいか
                 if (fileId) {
-                    const checkResponse = await gapi.client.drive.files.get({
-                        fileId: fileId,
-                        fields: 'modifiedTime',
-                        supportsAllDrives: true
-                    });
-                    
-                    const serverModifiedTime = new Date(checkResponse.result.modifiedTime);
-                    const localModifiedTime = state.lastUpdated ? new Date(state.lastUpdated) : new Date(0);
-                    
-                    // 1秒以上の差がある場合のみ競合とみなす（自分の保存との誤判定を防ぐ）
-                    if (serverModifiedTime.getTime() - localModifiedTime.getTime() > 1000) {
-                        // 編集中の内容を保持
-                        const currentFormData = {...state.formData};
-                        const currentEditingPostId = state.editingPostId;
-                        const currentViewMode = state.viewMode;
-                        const currentSelectedDate = state.selectedDate;
-                        
-                        // 最新データを自動で読み込む
-                        await loadYearData();
-                        
-                        // 画面を復元
-                        state.selectedDate = currentSelectedDate;
-                        state.editingPostId = currentEditingPostId;
-                        state.viewMode = currentViewMode;
-                        state.formData = currentFormData;
-                        
-                        showMessage('最新データを読み込みました。保存を続行します...', 'success');
-                        
-                        // 読み込んだ最新データに対して保存を実行（再帰的に実行）
-                        state.isSaving = false;
-                        await saveToDrive();
-                        return;
+                    try {
+                        const checkResponse = await gapi.client.drive.files.get({
+                            fileId: fileId,
+                            fields: 'modifiedTime',
+                            supportsAllDrives: true
+                        });
+                        const serverModifiedTime = new Date(checkResponse.result.modifiedTime).getTime();
+                        const syncedTime = state.lastSyncedModifiedTime ? new Date(state.lastSyncedModifiedTime).getTime() : 0;
+                        if (serverModifiedTime - syncedTime > 1000) {
+                            const ok = confirm(
+                                '他のユーザーが先に更新しています。\n' +
+                                `リモート更新: ${formatDateTime(checkResponse.result.modifiedTime)}\n` +
+                                `ローカル更新: ${formatDateTime(state.lastUpdated)}\n\n` +
+                                'OK = ローカルを優先して上書き保存\n' +
+                                'キャンセル = リモートを取得（ローカル変更は破棄）'
+                            );
+                            if (!ok) {
+                                pendingDirty = false;
+                                state.isSaving = false;
+                                await loadYearData({ silent: false, force: true });
+                                return;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('競合チェック失敗（保存は継続）:', e);
                     }
                 }
-        
+
                 const currentYear = state.currentDate.getFullYear();
                 const fileName = `sns_calendar_data_${currentYear}.json`;
-                
                 const now = new Date().toISOString();
                 const content = JSON.stringify({
                     posts: state.posts,
                     lastUpdated: now
                 });
-        
+
                 const file = new Blob([content], { type: 'application/json' });
                 const metadata = fileId ? {
                     name: fileName,
@@ -648,40 +730,39 @@
                     mimeType: 'application/json',
                     parents: [state.folderId]
                 };
-        
+
                 const form = new FormData();
                 form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
                 form.append('file', file);
-        
+
                 const url = fileId
-                    ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&supportsAllDrives=true`
-                    : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`;
-        
+                    ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&supportsAllDrives=true&fields=id,modifiedTime`
+                    : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,modifiedTime`;
+
                 const response = await fetch(url, {
                     method: fileId ? 'PATCH' : 'POST',
                     headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
                     body: form
                 });
-        
+
+                if (response.status === 401) {
+                    showMessage('認証の有効期限が切れました。再ログインしてください。', 'error');
+                    handleSignOut();
+                    return;
+                }
                 if (!response.ok) {
                     throw new Error(`保存に失敗: ${response.status}`);
                 }
-        
+
+                // 保存レスポンスから modifiedTime を直接取得（追加 API コール不要）
                 const result = await response.json();
-                if (!fileId) {
-                    fileId = result.id;
-                }
-        
-                // 保存後にDriveのmodifiedTimeを再取得して同期
-                const updatedFile = await gapi.client.drive.files.get({
-                    fileId: fileId,
-                    fields: 'modifiedTime',
-                    supportsAllDrives: true
-                });
-                state.lastUpdated = updatedFile.result.modifiedTime;
-                
-                showMessage('共有ドライブに保存しました！', 'success');
-        
+                if (!fileId) fileId = result.id;
+                const serverModifiedTime = result.modifiedTime || now;
+                state.lastUpdated = serverModifiedTime;
+                state.lastSyncedModifiedTime = serverModifiedTime;
+                pendingDirty = false;
+                saveCurrentYearCache();
+
             } catch (error) {
                 console.error('保存エラー:', error);
                 showMessage('保存に失敗: ' + error.message, 'error');
@@ -835,9 +916,9 @@
                 // 新規投稿の場合、作成した投稿のIDを設定
                 state.editingPostId = newPost.id;
             }
-         
-            await saveToDrive();
-            
+
+            persistState();
+
             // 閲覧モードに切り替え
             state.viewMode = 'view';
             render();
@@ -857,14 +938,14 @@
             }
         }
 
-        async function deletePost(dateStr, postId) {
+        function deletePost(dateStr, postId) {
             const datePosts = state.posts[dateStr].filter(p => p.id !== postId);
             if (datePosts.length === 0) {
                 delete state.posts[dateStr];
             } else {
                 state.posts[dateStr] = datePosts;
             }
-            await saveToDrive();
+            persistState();
             cancelEdit();
             render();
         }
@@ -1075,8 +1156,8 @@
                 state.formData.completedChecks.push(checkText);
             }
             
-            // 自動保存
-            saveToDrive();
+            // 自動保存 (debounce)
+            persistState();
             render();
         }
 
@@ -1091,14 +1172,14 @@
             if (value && !state.formData.checks.includes(value)) {
                 state.formData.checks.push(value);
                 input.value = '';
-                saveToDrive(); // 自動保存
+                persistState(); // 自動保存 (debounce)
                 render();
             }
         }
         
         function removeViewCheck(index) {
             state.formData.checks = state.formData.checks.filter((_, i) => i !== index);
-            saveToDrive(); // 自動保存
+            persistState(); // 自動保存 (debounce)
             render();
         }
 
@@ -1113,14 +1194,14 @@
             if (value && !state.formData.checks.includes(value)) {
                 state.formData.checks.push(value);
                 input.value = '';
-                saveToDrive(); // 自動保存
+                persistState(); // 自動保存 (debounce)
                 render();
             }
         }
         
         function removeCheckPerson(index) {
             state.formData.checks = state.formData.checks.filter((_, i) => i !== index);
-            saveToDrive(); // 自動保存
+            persistState(); // 自動保存 (debounce)
             render();
         }
 
@@ -1742,17 +1823,23 @@
                         ${state.isSignedIn ? `
                             <div class="flex items-center gap-2">
                                 ${state.userName ? `<div class="text-xs text-gray-600">ログイン中: ${state.userName}</div>` : ''}
-                                <div class="inline-flex items-center gap-2 bg-green-100 text-green-700 px-3 py-1 rounded-lg text-xs">
-                                    ✅ 共有ドライブ接続済
+                                <button onclick="loadFromDrive({silent: false})" ${state.isDriveLoading ? 'disabled' : ''} class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-50" title="再取得">
+                                    ${state.isDriveLoading ? '⏳' : '🔄'}
+                                </button>
+                                <div class="inline-flex items-center gap-2 ${state.isSaving ? 'bg-yellow-100 text-yellow-700' : (pendingDirty ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700')} px-3 py-1 rounded-lg text-xs">
+                                    ${state.isSaving ? '💾 保存中...' : (pendingDirty ? '✏️ 未同期' : '✅ 同期済')}
                                 </div>
                                 <button onclick="handleSignOut()" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-xs transition-colors">
                                     ログアウト
                                 </button>
                             </div>
                         ` : `
-                            <button onclick="handleAuthClick()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-lg text-sm">
-                                🔗 Google Driveに接続
-                            </button>
+                            <div class="flex items-center gap-2">
+                                ${state.lastUpdated ? `<div class="bg-gray-100 text-gray-600 px-3 py-1 rounded-lg text-xs">📂 ローカル表示中</div>` : ''}
+                                <button onclick="handleAuthClick()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors shadow-lg text-sm">
+                                    🔗 Google Driveに接続
+                                </button>
+                            </div>
                         `}
                         <div class="text-xs text-gray-400">
                             ${state.lastUpdated ? `最終更新: ${formatDateTime(state.lastUpdated)}　` : ''}アプリ更新: ${APP_VERSION}
@@ -1795,22 +1882,35 @@
         }
 
         window.addEventListener('load', () => {
+            // 1. localStorage キャッシュから即描画
+            const currentYear = state.currentDate.getFullYear();
+            loadYearCache(currentYear);
+            render();
+            // 2. Google API を裏で初期化
             gapiLoaded();
             gisLoaded();
-            
-            // 30分ごとにトークンの有効性をチェック
-            setInterval(async () => {
-                if (state.isSignedIn) {
-                    await refreshTokenIfNeeded();
+
+            // 10分ごとに更新をチェック (タブが可視 + 編集中でない + 未保存なし)
+            setInterval(() => {
+                if (state.isSignedIn
+                    && !state.isSaving
+                    && !pendingDirty
+                    && !state.selectedDate
+                    && document.visibilityState === 'visible') {
+                    checkForUpdates();
                 }
-            }, 1800000); // 1800000ms = 30分
-            
-            // 3分ごとに更新をチェック
-            setInterval(async () => {
-                if (state.isSignedIn && !state.isSaving) {
-                    await checkForUpdates();
+            }, POLL_INTERVAL_MS);
+
+            // タブが visible になったタイミングでも一度チェック
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible'
+                    && state.isSignedIn
+                    && !state.isSaving
+                    && !pendingDirty
+                    && !state.selectedDate) {
+                    checkForUpdates();
                 }
-            }, 180000); // 180000ms = 3分
+            });
         });
     </script>
 </body>
