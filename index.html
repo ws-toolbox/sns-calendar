@@ -24,7 +24,7 @@
         const LOCAL_STORAGE_PREFIX = 'sns_calendar_cache_v1_';
         const SAVE_DEBOUNCE_MS = 1500;
         const POLL_INTERVAL_MS = 600000; // 10分
-        const APP_VERSION = '2026/05/18 12:30';
+        const APP_VERSION = '2026/05/25 (保存ガード追加)';
 
         let gapiInited = false;
         let gisInited = false;
@@ -33,7 +33,7 @@
         let fileId = null;
         let saveTimerId = null;
         let pendingDirty = false;
-
+        let initialSyncDone = false; // 初回ロードで Drive と同期完了したか。完了まで保存/編集を抑止し上書き事故を防ぐ
         let state = {
             currentDate: new Date(),
             posts: {},
@@ -459,6 +459,7 @@
             state.posts = {};
             state.folderId = null;
             fileId = null;
+            initialSyncDone = false;
             render();
             showMessage('ログアウトしました', 'success');
         }
@@ -586,6 +587,7 @@
                                 );
                                 if (ok) {
                                     state.lastSyncedModifiedTime = serverModifiedTime;
+                                    initialSyncDone = true;
                                     scheduleSave();
                                     return;
                                 }
@@ -593,6 +595,7 @@
                             state.posts = data.posts || {};
                             state.lastUpdated = serverModifiedTime;
                             state.lastSyncedModifiedTime = serverModifiedTime;
+                            initialSyncDone = true;
                             saveCurrentYearCache();
                             if (!silent) showMessage(`${currentYear}年のデータを読み込みました`, 'success');
 
@@ -618,6 +621,8 @@
                         scheduleSave();
                     }
                 }
+                // サーバー状態との照合が完了 → 保存/編集を解禁
+                initialSyncDone = true;
             } catch (error) {
                 console.error('年データ読み込みエラー:', error);
                 if (error.status === 401 || error.result?.error?.code === 401) {
@@ -678,6 +683,12 @@
         async function saveToDrive() {
             if (!state.isSignedIn || !state.folderId || state.isSaving) return;
             if (!pendingDirty) return;
+            // 初回ロード完了前は保存しない（読込前の部分状態でサーバーを上書きしないため）
+            if (!initialSyncDone) {
+                pendingDirty = true;
+                scheduleSave(); // 同期完了後に再試行
+                return;
+            }
 
             state.isSaving = true;
             render();
@@ -969,6 +980,11 @@
         }
 
         function openEditForm(day, postId = null) {
+            // 初回ロード完了前は編集させない（読込前の状態に上書き編集してしまうのを防ぐ）
+            if (state.isSignedIn && !initialSyncDone) {
+                showMessage('データを読み込み中です。完了までお待ちください（編集・保存はまだできません）', 'error');
+                return;
+            }
             const dateStr = formatDate(new Date(state.currentDate.getFullYear(), state.currentDate.getMonth(), day));
             state.selectedDate = dateStr;
         
@@ -1826,8 +1842,8 @@
                                 <button onclick="loadFromDrive({silent: false})" ${state.isDriveLoading ? 'disabled' : ''} class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-50" title="再取得">
                                     ${state.isDriveLoading ? '⏳' : '🔄'}
                                 </button>
-                                <div class="inline-flex items-center gap-2 ${state.isSaving ? 'bg-yellow-100 text-yellow-700' : (pendingDirty ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700')} px-3 py-1 rounded-lg text-xs">
-                                    ${state.isSaving ? '💾 保存中...' : (pendingDirty ? '✏️ 未同期' : '✅ 同期済')}
+                                <div class="inline-flex items-center gap-2 ${!initialSyncDone ? 'bg-yellow-100 text-yellow-700' : (state.isSaving ? 'bg-yellow-100 text-yellow-700' : (pendingDirty ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'))} px-3 py-1 rounded-lg text-xs">
+                                    ${!initialSyncDone ? '📥 読み込み中...' : (state.isSaving ? '💾 保存中...' : (pendingDirty ? '✏️ 未同期' : '✅ 同期済'))}
                                 </div>
                                 <button onclick="handleSignOut()" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded-lg text-xs transition-colors">
                                     ログアウト
@@ -1869,7 +1885,9 @@
                         </div>
                     </div>
                     <div class="lg:col-span-1">
-                        ${editFormHTML || '<div class="bg-gray-50 rounded-2xl shadow-xl p-6 text-center text-gray-500">カレンダーから日付を選択してください</div>'}
+                        ${editFormHTML || (state.isSignedIn && !initialSyncDone
+                            ? '<div class="bg-yellow-50 border border-yellow-200 rounded-2xl shadow-xl p-6 text-center text-yellow-700">📥 データを読み込み中です…<div class="text-xs mt-1">完了するまで編集・保存はできません</div></div>'
+                            : '<div class="bg-gray-50 rounded-2xl shadow-xl p-6 text-center text-gray-500">カレンダーから日付を選択してください</div>')}
                     </div>
                 </div>
             `;
