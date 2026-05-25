@@ -24,7 +24,7 @@
         const LOCAL_STORAGE_PREFIX = 'sns_calendar_cache_v1_';
         const SAVE_DEBOUNCE_MS = 1500;
         const POLL_INTERVAL_MS = 600000; // 10分
-        const APP_VERSION = '2026/05/25 (画像分離・保存ガード)';
+        const APP_VERSION = '2026/05/25 (通知を右下へ移動)';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1050,7 +1050,7 @@
 
         function showMessage(message, type) {
             const messageDiv = document.createElement('div');
-            messageDiv.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${type === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
+            messageDiv.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${type === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
             messageDiv.textContent = message;
             document.body.appendChild(messageDiv);
             setTimeout(() => messageDiv.remove(), 3000);
