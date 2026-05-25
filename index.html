@@ -24,7 +24,7 @@
         const LOCAL_STORAGE_PREFIX = 'sns_calendar_cache_v1_';
         const SAVE_DEBOUNCE_MS = 1500;
         const POLL_INTERVAL_MS = 600000; // 10分
-        const APP_VERSION = '2026/05/25 (保存ガード追加)';
+        const APP_VERSION = '2026/05/25 (画像分離・保存ガード)';
 
         let gapiInited = false;
         let gisInited = false;
@@ -34,6 +34,8 @@
         let saveTimerId = null;
         let pendingDirty = false;
         let initialSyncDone = false; // 初回ロードで Drive と同期完了したか。完了まで保存/編集を抑止し上書き事故を防ぐ
+        let imagesFolderId = null; // 画像個別ファイルを格納する images サブフォルダの ID（遅延作成・キャッシュ）
+        const imageDataUrlCache = new Map(); // fileId -> dataURL のセッション内キャッシュ（再取得を防ぐ）
         let state = {
             currentDate: new Date(),
             posts: {},
@@ -783,6 +785,220 @@
             }
         }
 
+        // ========== 画像の個別ファイル化 (base64 を JSON に埋め込まず Drive に分離) ==========
+        // images サブフォルダを取得（無ければ作成）
+        async function ensureImagesFolder() {
+            if (imagesFolderId) return imagesFolderId;
+            if (!state.folderId) throw new Error('フォルダ未接続');
+            const listRes = await gapi.client.drive.files.list({
+                q: `name='images' and mimeType='application/vnd.google-apps.folder' and '${state.folderId}' in parents and trashed=false`,
+                fields: 'files(id)',
+                spaces: 'drive',
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true,
+                corpora: 'drive',
+                driveId: SHARED_DRIVE_ID
+            });
+            if (listRes.result.files && listRes.result.files.length > 0) {
+                imagesFolderId = listRes.result.files[0].id;
+                return imagesFolderId;
+            }
+            const createRes = await gapi.client.drive.files.create({
+                resource: { name: 'images', mimeType: 'application/vnd.google-apps.folder', parents: [state.folderId] },
+                fields: 'id',
+                supportsAllDrives: true
+            });
+            imagesFolderId = createRes.result.id;
+            return imagesFolderId;
+        }
+
+        // dataURL を images フォルダに個別ファイルとしてアップロードし fileId を返す
+        async function uploadDataUrlToDrive(dataUrl, name) {
+            const folderId = await ensureImagesFolder();
+            const blob = await (await fetch(dataUrl)).blob();
+            const metadata = { name: name || `img_${Date.now()}`, parents: [folderId] };
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+            form.append('file', blob);
+            const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id', {
+                method: 'POST',
+                headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+                body: form
+            });
+            if (!res.ok) throw new Error(`画像アップロード失敗: ${res.status}`);
+            const result = await res.json();
+            // アップロードした dataURL をキャッシュに載せておく（直後の表示で再取得不要に）
+            imageDataUrlCache.set(result.id, dataUrl);
+            return result.id;
+        }
+
+        // fileId から dataURL を取得（キャッシュあり）
+        async function fetchDriveFileAsDataUrl(fileId) {
+            if (imageDataUrlCache.has(fileId)) return imageDataUrlCache.get(fileId);
+            const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
+                headers: new Headers({ 'Authorization': 'Bearer ' + accessToken })
+            });
+            if (!res.ok) throw new Error(`画像取得失敗: ${res.status}`);
+            const blob = await res.blob();
+            const dataUrl = await new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => resolve(r.result);
+                r.onerror = reject;
+                r.readAsDataURL(blob);
+            });
+            imageDataUrlCache.set(fileId, dataUrl);
+            return dataUrl;
+        }
+
+        // formData.images のうち fileId だけで data 未取得のものを取得して data を補充
+        async function hydrateFormImages() {
+            const imgs = state.formData.images || [];
+            const targets = imgs.filter(im => im && im.fileId && !im.data);
+            if (targets.length === 0) return;
+            await Promise.all(targets.map(async (im) => {
+                try {
+                    im.data = await fetchDriveFileAsDataUrl(im.fileId);
+                } catch (e) {
+                    console.error('画像hydrate失敗:', im.fileId, e);
+                }
+            }));
+            render();
+        }
+
+        // ========== 移行ツール (旧base64埋め込み → 画像個別ファイル化) ==========
+        let migrationBusy = false;
+        let migrationMessage = '';
+
+        function setMigrationProgress(text) {
+            migrationMessage = text;
+            const el = document.getElementById('migrationProgress');
+            if (el) el.textContent = text;
+        }
+
+        // 現在表示中の年データを移行する（事前に .bak を作成）
+        async function migrateCurrentYear() {
+            if (migrationBusy) return;
+            if (!state.isSignedIn || !state.folderId) { showMessage('先に Google Drive に接続してください', 'error'); return; }
+            if (!initialSyncDone) { showMessage('データ読み込み完了までお待ちください', 'error'); return; }
+            const year = state.currentDate.getFullYear();
+            const fileName = `sns_calendar_data_${year}.json`;
+            if (!fileId) { showMessage(`${year}年のデータファイルが見つかりません`, 'error'); return; }
+
+            // 移行対象の画像（base64 を持ち fileId 未設定）を数える
+            let totalTargets = 0;
+            for (const date in state.posts) {
+                for (const post of state.posts[date]) {
+                    for (const img of (post.images || [])) {
+                        if (img && img.data && !img.fileId) totalTargets++;
+                    }
+                }
+            }
+            if (totalTargets === 0) { showMessage(`${year}年に移行対象の画像はありません（移行済みの可能性）`, 'success'); return; }
+
+            if (!confirm(`${year}年のデータを移行します。\n\n・移行対象の画像: ${totalTargets} 枚\n・先に ${fileName}.bak_(日時) としてバックアップを作成します\n・画像を images フォルダへ個別保存し、JSON は参照のみに軽量化します\n\n実行してよいですか？`)) return;
+
+            migrationBusy = true;
+            render();
+            try {
+                // 1) バックアップ（Drive 上でコピー）
+                setMigrationProgress('バックアップを作成中...');
+                const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                await gapi.client.drive.files.copy({
+                    fileId: fileId,
+                    resource: { name: `${fileName}.bak_${ts}`, parents: [state.folderId] },
+                    supportsAllDrives: true
+                });
+
+                // 2) 画像を個別アップロード
+                await ensureImagesFolder();
+                let done = 0;
+                for (const date in state.posts) {
+                    for (const post of state.posts[date]) {
+                        for (const img of (post.images || [])) {
+                            if (img && img.data && !img.fileId) {
+                                img.fileId = await uploadDataUrlToDrive(img.data, img.name || `img_${date}_${done}`);
+                                delete img.data; // JSON から base64 を除去
+                                done++;
+                                setMigrationProgress(`画像をアップロード中... ${done} / ${totalTargets}`);
+                            } else if (img && img.data && img.fileId) {
+                                delete img.data; // 既に fileId があるなら base64 は不要
+                            }
+                        }
+                    }
+                }
+
+                // 3) 軽量化した JSON を保存
+                setMigrationProgress('軽量化した JSON を保存中...');
+                pendingDirty = true;
+                await saveToDrive();
+
+                setMigrationProgress(`✅ 完了: ${done} 枚を移行しました。バックアップ: ${fileName}.bak_${ts}`);
+                showMessage(`${year}年の移行が完了しました（${done}枚）`, 'success');
+            } catch (e) {
+                console.error('移行エラー:', e);
+                setMigrationProgress(`❌ エラー: ${e.message || e}。バックアップから復元できます。`);
+                showMessage('移行中にエラーが発生しました。バックアップから復元してください。', 'error');
+            } finally {
+                migrationBusy = false;
+                render();
+            }
+        }
+
+        // 最新のバックアップから現在の年データを復元する
+        async function restoreCurrentYearBackup() {
+            if (migrationBusy) return;
+            if (!state.isSignedIn || !state.folderId) { showMessage('先に Google Drive に接続してください', 'error'); return; }
+            const year = state.currentDate.getFullYear();
+            const fileName = `sns_calendar_data_${year}.json`;
+
+            const listRes = await gapi.client.drive.files.list({
+                q: `name contains '${fileName}.bak_' and '${state.folderId}' in parents and trashed=false`,
+                fields: 'files(id, name, modifiedTime)',
+                spaces: 'drive',
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true,
+                orderBy: 'name desc'
+            });
+            const baks = listRes.result.files || [];
+            if (baks.length === 0) { showMessage(`${year}年のバックアップが見つかりません`, 'error'); return; }
+            const latest = baks[0];
+            if (!confirm(`最新バックアップ「${latest.name}」から ${year}年データを復元します。\n現在の ${fileName} は上書きされます。よろしいですか？`)) return;
+
+            migrationBusy = true;
+            render();
+            try {
+                setMigrationProgress('バックアップを取得中...');
+                const content = await gapi.client.drive.files.get({ fileId: latest.id, alt: 'media', supportsAllDrives: true });
+                JSON.parse(content.body); // 妥当性チェック（壊れていれば例外）
+
+                setMigrationProgress('現在ファイルへ書き戻し中...');
+                const blob = new Blob([content.body], { type: 'application/json' });
+                const form = new FormData();
+                form.append('metadata', new Blob([JSON.stringify({ name: fileName, mimeType: 'application/json' })], { type: 'application/json' }));
+                form.append('file', blob);
+                const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart&supportsAllDrives=true&fields=id,modifiedTime`, {
+                    method: 'PATCH',
+                    headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+                    body: form
+                });
+                if (!res.ok) throw new Error(`復元失敗: ${res.status}`);
+
+                setMigrationProgress('再読み込み中...');
+                state.lastUpdated = null; // 強制再取得
+                imageDataUrlCache.clear();
+                await loadYearData({ silent: false, force: true });
+                setMigrationProgress(`✅ 「${latest.name}」から復元しました`);
+                showMessage(`${year}年データを復元しました`, 'success');
+            } catch (e) {
+                console.error('復元エラー:', e);
+                setMigrationProgress(`❌ 復元エラー: ${e.message || e}`);
+                showMessage('復元に失敗しました', 'error');
+            } finally {
+                migrationBusy = false;
+                render();
+            }
+        }
+
         async function updateSpreadsheetInBackground() {
             try {
                 if (Object.keys(state.posts).length === 0) return;
@@ -863,21 +1079,41 @@
 
         async function savePost() {
             if (!state.formData.title && !state.formData.text) return;
-         
+
             // 画像と動画を分離
             const imageFiles = state.formData.images.filter(file => file.type === 'image');
             const videoFiles = state.formData.images.filter(file => file.type === 'video');
-         
+
+            // 画像を Drive に個別アップロードし、JSON には fileId のみ保存する（base64 を埋め込まない）
+            let storedImages;
+            try {
+                const needUpload = imageFiles.filter(f => !f.fileId && f.data).length;
+                if (needUpload > 0) showMessage('画像をアップロード中...', 'success');
+                storedImages = [];
+                for (const file of imageFiles) {
+                    let fileId = file.fileId;
+                    if (!fileId) {
+                        if (!file.data) continue; // data も fileId も無ければスキップ
+                        fileId = await uploadDataUrlToDrive(file.data, file.name);
+                        file.fileId = fileId; // formData 側にも反映し再保存時の再アップを防ぐ
+                    }
+                    storedImages.push({
+                        type: file.type,
+                        name: file.name,
+                        fileId: fileId,
+                        uploadDate: file.uploadDate || new Date().toISOString()
+                    });
+                }
+            } catch (e) {
+                console.error('画像アップロード失敗:', e);
+                showMessage('画像の保存に失敗しました。もう一度お試しください。', 'error');
+                return; // 保存中止（formData は保持されるので再試行可能）
+            }
+
             const newPost = {
                 ...state.formData,
                 id: state.editingPostId || Date.now(),
-                images: imageFiles.map(file => ({
-                    type: file.type,
-                    name: file.name,
-                    size: file.data ? file.data.length : 0,
-                    data: file.data,
-                    uploadDate: new Date().toISOString()
-                })),
+                images: storedImages,
                 checks: state.formData.checks || [],
                 completedChecks: state.formData.completedChecks || [],
                 productNumber: state.formData.productNumber || '',
@@ -992,6 +1228,9 @@
                 const post = state.posts[dateStr].find(p => p.id === postId);
                 if (post) {
                     state.formData = { ...post };
+                    // images は要素ごとにコピーして state.posts と参照を切る
+                    // （hydrate で data を補充しても state.posts/JSON を base64 で汚染しないため）
+                    state.formData.images = (post.images || []).map(im => ({ ...im }));
                     if (!state.formData.platforms && state.formData.platform) {
                         state.formData.platforms = [state.formData.platform];
                     }
@@ -1039,8 +1278,10 @@
             } else {
                 setUrlParams(null, null);
             }
-            
+
             render();
+            // fileId のみで保持されている画像を Drive から取得して表示（旧base64画像はそのまま）
+            hydrateFormImages();
         }
 
         function switchToEditMode() {
@@ -1277,8 +1518,11 @@
                 
                 for (const image of state.formData.images) {
                     try {
+                        // data 未取得（fileId のみ）の場合は Drive から取得して補充
+                        const dataUrl = image.data || (image.fileId ? await fetchDriveFileAsDataUrl(image.fileId) : null);
+                        if (!dataUrl) continue;
                         // Base64からBlobに変換
-                        const response = await fetch(image.data);
+                        const response = await fetch(dataUrl);
                         const blob = await response.blob();
                         
                         // Google Driveにアップロード
@@ -1637,14 +1881,18 @@
                                     <div class="grid grid-cols-3 gap-2">
                                         ${state.formData.images.map((file, index) => `
                                             <div class="relative group">
-                                                ${file.type === 'image' ? `
+                                                ${!file.data ? `
+                                                    <div class="w-full h-24 flex items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-400 text-xs">⏳ 読込中...</div>
+                                                ` : (file.type === 'image' ? `
                                                     <img src="${file.data}" alt="画像 ${index + 1}" class="w-full h-24 object-cover rounded-lg border border-gray-200">
                                                 ` : `
                                                     <video src="${file.data}" class="w-full h-24 object-cover rounded-lg border border-gray-200" controls></video>
-                                                `}
+                                                `)}
+                                                ${file.data ? `
                                                 <button onclick="downloadImage({data: state.formData.images[${index}].data, type: state.formData.images[${index}].type}, \`${state.formData.title || 'media'}\`, ${index})" class="absolute bottom-1 right-1 bg-blue-500 text-white px-2 py-0.5 rounded-lg hover:bg-blue-600 transition-colors shadow-lg text-xs">
                                                     ⬇
                                                 </button>
+                                                ` : ''}
                                             </div>
                                         `).join('')}
                                     </div>
@@ -1789,11 +2037,13 @@
                                             <div class="grid grid-cols-3 gap-2 mb-2">
                                                 ${state.formData.images.map((image, index) => `
                                                     <div class="relative group">
-                                                        ${image.type === 'image' ? `
+                                                        ${!image.data ? `
+                                                            <div class="w-full h-20 flex items-center justify-center rounded-lg bg-gray-50 text-gray-400 text-xs">⏳ 読込中...</div>
+                                                        ` : (image.type === 'image' ? `
                                                             <img src="${image.data}" alt="画像 ${index + 1}" class="w-full h-20 object-cover rounded-lg">
                                                         ` : `
                                                             <video src="${image.data}" class="w-full h-20 object-cover rounded-lg" controls></video>
-                                                        `}
+                                                        `)}
                                                         <button onclick="removeImage(${index})" class="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition-colors shadow-lg opacity-0 group-hover:opacity-100 text-xs leading-none w-5 h-5 flex items-center justify-center">
                                                             ×
                                                         </button>
@@ -1862,6 +2112,23 @@
                         </div>
                     </div>
                 </div>
+                ${(new URLSearchParams(window.location.search).get('admin') === '1' && state.isSignedIn) ? `
+                    <div class="bg-white border border-purple-200 rounded-2xl shadow p-4 mb-4">
+                        <div class="flex items-center justify-between flex-wrap gap-2">
+                            <div class="text-sm font-semibold text-purple-700">🗂 管理: ${state.currentDate.getFullYear()}年データの画像移行</div>
+                            <div class="flex gap-2">
+                                <button onclick="migrateCurrentYear()" ${(!initialSyncDone || migrationBusy) ? 'disabled' : ''} class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50">
+                                    ${migrationBusy ? '処理中...' : `この年(${state.currentDate.getFullYear()})の画像をDriveに移行`}
+                                </button>
+                                <button onclick="restoreCurrentYearBackup()" ${migrationBusy ? 'disabled' : ''} class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50">
+                                    バックアップから復元
+                                </button>
+                            </div>
+                        </div>
+                        <div id="migrationProgress" class="text-xs text-gray-600 mt-2">${migrationMessage}</div>
+                        <div class="text-[11px] text-gray-400 mt-1">※ 移行前に .bak_(日時) を自動作成します。表示中の月の年が対象です。</div>
+                    </div>
+                ` : ''}
                 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
                     <div class="xl:col-span-2">
                         <div class="bg-white rounded-2xl shadow-xl p-6">
