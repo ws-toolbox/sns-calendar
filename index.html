@@ -24,7 +24,7 @@
         const LOCAL_STORAGE_PREFIX = 'sns_calendar_cache_v1_';
         const SAVE_DEBOUNCE_MS = 1500;
         const POLL_INTERVAL_MS = 600000; // 10分
-        const APP_VERSION = '2026/05/25 (通知を右下へ移動)';
+        const APP_VERSION = '2026/05/25 (再ログイン時の空表示を修正)';
 
         let gapiInited = false;
         let gisInited = false;
@@ -462,6 +462,11 @@
             state.folderId = null;
             fileId = null;
             initialSyncDone = false;
+            // posts を空にしたので更新時刻もリセットする。
+            // これを残すと再ログイン時に「ローカルが最新」と誤判定され Drive から取得されず空表示になる。
+            state.lastUpdated = null;
+            state.lastSyncedModifiedTime = null;
+            imageDataUrlCache.clear();
             render();
             showMessage('ログアウトしました', 'success');
         }
