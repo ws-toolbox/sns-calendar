@@ -12,6 +12,24 @@
 <body class="bg-gradient-to-br from-purple-50 to-blue-50 min-h-screen">
     <div id="app" class="max-w-[1920px] mx-auto p-6"></div>
 
+    <!-- 画像の拡大表示（ライトボックス） -->
+    <div id="mediaViewer" class="hidden fixed inset-0 z-50 bg-black/80 items-center justify-center p-4 sm:p-10" onclick="closeMediaViewer(event)">
+        <img id="mediaViewerImage" src="" alt="拡大表示" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl">
+        <button onclick="closeMediaViewer(event, true)" class="absolute top-3 right-3 bg-white/90 hover:bg-white text-gray-700 w-9 h-9 rounded-full shadow-lg flex items-center justify-center text-xl leading-none">
+            ×
+        </button>
+        <button id="mediaViewerPrev" onclick="stepMediaViewer(event, -1)" class="hidden absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 w-9 h-9 rounded-full shadow-lg flex items-center justify-center text-2xl leading-none pb-1">
+            ‹
+        </button>
+        <button id="mediaViewerNext" onclick="stepMediaViewer(event, 1)" class="hidden absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 w-9 h-9 rounded-full shadow-lg flex items-center justify-center text-2xl leading-none pb-1">
+            ›
+        </button>
+        <div id="mediaViewerCounter" class="hidden absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1 rounded-full text-xs"></div>
+        <button onclick="downloadFromViewer(event)" class="absolute bottom-3 right-3 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg shadow-lg text-xs">
+            ⬇ ダウンロード
+        </button>
+    </div>
+
     <script>
         const CLIENT_ID = '417822818519-8imosvo7c9e2gem7cp0rse0vm8vrjlou.apps.googleusercontent.com';
         const SCOPES = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets';
@@ -24,7 +42,7 @@
         const LOCAL_STORAGE_PREFIX = 'sns_calendar_cache_v1_';
         const SAVE_DEBOUNCE_MS = 1500;
         const POLL_INTERVAL_MS = 600000; // 10分
-        const APP_VERSION = '2026/05/25 (再ログイン時の空表示を修正)';
+        const APP_VERSION = '2026/08/02 (画像を全体表示＋クリックで拡大)';
 
         let gapiInited = false;
         let gisInited = false;
@@ -1379,6 +1397,84 @@
             document.body.removeChild(link);
         }
 
+        // ========== 画像の拡大表示（ライトボックス） ==========
+        let viewerFiles = [];
+        let viewerTitle = 'media';
+        let viewerIndex = null;
+
+        function openMediaViewer(index) {
+            const images = state.formData.images || [];
+            const file = images[index];
+            if (!file || file.type !== 'image' || !file.data) return;
+            viewerFiles = images.slice();
+            viewerTitle = state.formData.title || 'media';
+            viewerIndex = index;
+            renderMediaViewer();
+            const viewer = document.getElementById('mediaViewer');
+            viewer.classList.remove('hidden');
+            viewer.classList.add('flex');
+        }
+
+        // 拡大表示できるのは画像のみ（動画は再生させるので対象外）
+        function viewerImageIndexes() {
+            return viewerFiles
+                .map((file, i) => (file && file.type === 'image' && file.data ? i : -1))
+                .filter(i => i >= 0);
+        }
+
+        function renderMediaViewer() {
+            const file = viewerFiles[viewerIndex];
+            if (!file) {
+                closeMediaViewer(null, true);
+                return;
+            }
+            document.getElementById('mediaViewerImage').src = file.data;
+            const list = viewerImageIndexes();
+            const multiple = list.length > 1;
+            document.getElementById('mediaViewerPrev').classList.toggle('hidden', !multiple);
+            document.getElementById('mediaViewerNext').classList.toggle('hidden', !multiple);
+            const counter = document.getElementById('mediaViewerCounter');
+            counter.textContent = `${list.indexOf(viewerIndex) + 1} / ${list.length}`;
+            counter.classList.toggle('hidden', !multiple);
+        }
+
+        function stepMediaViewer(event, offset) {
+            if (event) event.stopPropagation();
+            const list = viewerImageIndexes();
+            if (list.length === 0) return;
+            const pos = list.indexOf(viewerIndex);
+            viewerIndex = list[(pos + offset + list.length) % list.length];
+            renderMediaViewer();
+        }
+
+        // force=false のときは背景クリックのみ閉じる（画像・ボタンのクリックでは閉じない）
+        function closeMediaViewer(event, force = false) {
+            if (event) {
+                if (!force && event.target !== event.currentTarget) return;
+                event.stopPropagation();
+            }
+            const viewer = document.getElementById('mediaViewer');
+            viewer.classList.add('hidden');
+            viewer.classList.remove('flex');
+            document.getElementById('mediaViewerImage').src = '';
+            viewerIndex = null;
+            viewerFiles = [];
+        }
+
+        function downloadFromViewer(event) {
+            if (event) event.stopPropagation();
+            const file = viewerFiles[viewerIndex];
+            if (!file) return;
+            downloadImage({ data: file.data, type: file.type }, viewerTitle, viewerIndex);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (viewerIndex === null) return;
+            if (e.key === 'Escape') closeMediaViewer(null, true);
+            if (e.key === 'ArrowLeft') stepMediaViewer(null, -1);
+            if (e.key === 'ArrowRight') stepMediaViewer(null, 1);
+        });
+
         function getFileExtension(file) {
             if (file.type === 'image') {
                 const match = file.data.match(/^data:image\/([a-zA-Z0-9]+);/);
@@ -1889,9 +1985,9 @@
                                                 ${!file.data ? `
                                                     <div class="w-full h-24 flex items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-400 text-xs">⏳ 読込中...</div>
                                                 ` : (file.type === 'image' ? `
-                                                    <img src="${file.data}" alt="画像 ${index + 1}" class="w-full h-24 object-cover rounded-lg border border-gray-200">
+                                                    <img src="${file.data}" alt="画像 ${index + 1}" onclick="openMediaViewer(${index})" class="w-full h-24 object-contain bg-gray-50 rounded-lg border border-gray-200 cursor-zoom-in">
                                                 ` : `
-                                                    <video src="${file.data}" class="w-full h-24 object-cover rounded-lg border border-gray-200" controls></video>
+                                                    <video src="${file.data}" class="w-full h-24 object-contain bg-gray-50 rounded-lg border border-gray-200" controls></video>
                                                 `)}
                                                 ${file.data ? `
                                                 <button onclick="downloadImage({data: state.formData.images[${index}].data, type: state.formData.images[${index}].type}, \`${state.formData.title || 'media'}\`, ${index})" class="absolute bottom-1 right-1 bg-blue-500 text-white px-2 py-0.5 rounded-lg hover:bg-blue-600 transition-colors shadow-lg text-xs">
@@ -2045,9 +2141,9 @@
                                                         ${!image.data ? `
                                                             <div class="w-full h-20 flex items-center justify-center rounded-lg bg-gray-50 text-gray-400 text-xs">⏳ 読込中...</div>
                                                         ` : (image.type === 'image' ? `
-                                                            <img src="${image.data}" alt="画像 ${index + 1}" class="w-full h-20 object-cover rounded-lg">
+                                                            <img src="${image.data}" alt="画像 ${index + 1}" onclick="openMediaViewer(${index})" class="w-full h-20 object-contain bg-gray-50 rounded-lg cursor-zoom-in">
                                                         ` : `
-                                                            <video src="${image.data}" class="w-full h-20 object-cover rounded-lg" controls></video>
+                                                            <video src="${image.data}" class="w-full h-20 object-contain bg-gray-50 rounded-lg" controls></video>
                                                         `)}
                                                         <button onclick="removeImage(${index})" class="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition-colors shadow-lg opacity-0 group-hover:opacity-100 text-xs leading-none w-5 h-5 flex items-center justify-center">
                                                             ×
