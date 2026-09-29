@@ -377,6 +377,9 @@
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPES,
+                // 同じクライアントIDで他アプリ(YouTube等)に許可した権限を合算しない
+                // (Drive系と youtube.force-ssl は同時要求できず 400 invalid_request になる)
+                include_granted_scopes: false,
                 callback: ''
             });
             gisInited = true;
