@@ -257,6 +257,38 @@
         function copyTrackedUrl(index) {
             if (trackedUrlList[index]) copyToClipboard(trackedUrlList[index]);
         }
+        // 「短縮」= 自社の短縮URL(s.winds-score.com・Cloudflare Worker ws-shortlink)。winds-score.com のURLだけ
+        const SHORTEN_API = 'https://s.winds-score.com/api/shorten';
+        const shortUrlCache = new Map();
+        function isShortenable(url) {
+            try { const h = new URL(url).hostname.toLowerCase(); return h === 'winds-score.com' || h.endsWith('.winds-score.com'); } catch { return false; }
+        }
+        async function fetchShortUrl(url) {
+            if (shortUrlCache.has(url)) return shortUrlCache.get(url);
+            const res = await fetch(SHORTEN_API, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({url})});
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.short) throw new Error(data.error || '短縮に失敗しました');
+            shortUrlCache.set(url, data.short);
+            return data.short;
+        }
+        async function shortenTrackedUrl(index) {
+            const url = trackedUrlList[index];
+            if (!url) return;
+            if (!isShortenable(url)) { showMessage('winds-score.com のURLだけ短縮できます', 'error'); return; }
+            const p = fetchShortUrl(url);
+            try {
+                // Safari は通信を待つとコピーが拒否されるため、押した時点で ClipboardItem に約束を渡す
+                if (window.ClipboardItem && navigator.clipboard.write) {
+                    await navigator.clipboard.write([new ClipboardItem({'text/plain': p.then(s => new Blob([s], {type: 'text/plain'}))})]);
+                } else {
+                    await navigator.clipboard.writeText(await p);
+                }
+                showMessage('短縮URLをコピーしました！ ' + (await p), 'success');
+            } catch (e) {
+                try { const s = await p; await navigator.clipboard.writeText(s); showMessage('短縮URLをコピーしました！ ' + s, 'success'); }
+                catch (e2) { showMessage((e2 && e2.message) || '短縮に失敗しました', 'error'); }
+            }
+        }
 
         function getCurrentYearFileName() {
             const currentYear = new Date().getFullYear();
@@ -2025,6 +2057,7 @@
                                                 <span class="${item.color} text-white px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap w-20 text-center">${item.label}</span>
                                                 <span class="text-xs text-gray-700 break-all flex-1 font-mono">${item.url.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span>
                                                 <button onclick="copyTrackedUrl(${idx})" class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs whitespace-nowrap">コピー</button>
+                                                ${isShortenable(item.url) ? `<button onclick="shortenTrackedUrl(${idx})" class="bg-teal-500 hover:bg-teal-600 text-white px-2 py-1 rounded text-xs whitespace-nowrap" title="短縮URLを作ってコピー">短縮</button>` : ''}
                                             </div>`;
                                         }).join('')).join('')}
                                     </div>
